@@ -8,6 +8,8 @@ const appState = {
   currentRunId: null,
   currentRunRecord: null,
   currentSource: "",
+  currentPolicyState: "Named preset",
+  pendingAiPolicy: null,
   examples: {},
   tourStep: 1,
   activeView: "view-overview",
@@ -241,6 +243,7 @@ function initEditor() {
   if (editor) {
     editor.addEventListener("input", () => {
       appState.currentSource = editor.value;
+      setEditorPolicyState("Custom policy — unsaved", true);
       updateLineNumbers();
     });
 
@@ -320,6 +323,7 @@ async function loadExample(name) {
     if (editor) {
       editor.value = ex.code;
       appState.currentSource = ex.code;
+      setEditorPolicyState(`Named preset — ${ex.filename}`, false, name);
       const gutter = document.getElementById("editorLineNumbers");
       if (gutter) {
         const lines = ex.code.split("\n").length;
@@ -328,6 +332,17 @@ async function loadExample(name) {
       await executeCompileAndRun();
     }
   }
+}
+
+function setEditorPolicyState(label, clearPreset = false, presetName = null) {
+  appState.currentPolicyState = label;
+  const select = document.getElementById("editorExampleSelect");
+  if (select) {
+    if (presetName !== null) select.value = presetName;
+    else if (clearPreset) select.selectedIndex = -1;
+  }
+  const state = document.getElementById("editorPolicyState");
+  if (state) state.textContent = label;
 }
 
 // Execute Full Pipeline Run (/api/run)
@@ -349,53 +364,65 @@ async function executeCompileAndRun() {
   setStageChip("stgSafety", "pending");
   setStageChip("stgIR", "pending");
 
+  let runRecord;
   try {
     const res = await fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source: code, replay: true }),
     });
+    if (!res.ok) throw new Error(`API returned ${res.status}`);
+    runRecord = await res.json();
+  } catch (err) {
+    // This is a request/API failure, not a compiler failure. A compiler failure
+    // is represented by compile.ok=false in an otherwise valid run record.
+    console.error("Run request failed:", err);
+    if (statusText) statusText.textContent = "Unable to execute compilation request.";
+    if (compileBtn) compileBtn.disabled = false;
+    return;
+  }
 
-    const runRecord = await res.json();
-    appState.currentRunId = runRecord.run_id;
-    appState.currentRunRecord = runRecord;
-
-    // 1. Update Compact Stages Bar with Real Telemetry
-    renderStageTelemetry(runRecord.stages, runRecord.compilation);
-
-    // 2. Update Inspector Drawer
-    renderInspectorDrawer(runRecord);
-
-    // 3. Update Verification Workspace
-    renderVerificationView(runRecord);
-
-    // 4. Update Workload Simulator Workspace
-    renderSimulatorView(runRecord);
-
-    // 5. Update eBPF C Display in Code Explorer
-    renderEbpfSkeleton(runRecord.c_skeleton);
-
-    // 6. Enable PDF Download Buttons
-    const footerPdfBtn = document.getElementById("footerDownloadPdfBtn");
-    const verifPdfBtn = document.getElementById("verifDownloadPdfBtn");
-    if (footerPdfBtn) footerPdfBtn.disabled = false;
-    if (verifPdfBtn) verifPdfBtn.disabled = false;
+  try {
+    renderRunRecord(runRecord);
 
     if (statusText) {
-      if (runRecord.compilation.ok) {
-        const dur = (runRecord.total_compile_ms || 0).toFixed(2);
+      const compilation = runRecord.compile || {};
+      if (compilation.ok) {
+        const dur = (compilation.total_duration_ms || 0).toFixed(2);
         statusText.innerHTML = `<strong>Compiled successfully</strong> in ${dur}ms &mdash; Run ID: <code>${runRecord.run_id}</code>`;
       } else {
-        statusText.innerHTML = `<span class="text-red"><strong>Compilation failed:</strong> ${escapeHtml(runRecord.compilation.summary || "Errors detected")}</span>`;
+        statusText.innerHTML = `<span class="text-red"><strong>Compilation failed:</strong> ${escapeHtml(compilation.summary || "Errors detected")}</span>`;
       }
     }
-
   } catch (err) {
-    console.error("Execution pipeline error:", err);
-    if (statusText) statusText.textContent = "Error executing compilation.";
+    // The run is real and may still be downloadable; only its presentation failed.
+    console.error("Run result rendering failed:", err);
+    if (statusText) statusText.textContent = "Run completed, but results could not be rendered.";
   } finally {
     if (compileBtn) compileBtn.disabled = false;
   }
+}
+
+const STAGE_CHIP_IDS = {
+  "Lexical Analysis": "stgLexer",
+  "Parsing & AST": "stgParser",
+  "Safety Pass": "stgSafety",
+  "IR Lowering": "stgIR",
+};
+
+function renderRunRecord(runRecord) {
+  appState.currentRunId = runRecord.run_id;
+  appState.currentRunRecord = runRecord;
+  renderStageTelemetry(runRecord.compile?.stages, runRecord.compile);
+  renderInspectorDrawer(runRecord);
+  renderVerificationView(runRecord);
+  renderSimulatorView(runRecord);
+  renderEbpfSkeleton(runRecord.codegen?.c_code);
+
+  const footerPdfBtn = document.getElementById("footerDownloadPdfBtn");
+  const verifPdfBtn = document.getElementById("verifDownloadPdfBtn");
+  if (footerPdfBtn) footerPdfBtn.disabled = false;
+  if (verifPdfBtn) verifPdfBtn.disabled = false;
 }
 
 function setStageChip(chipId, status, durationMs = null) {
@@ -412,13 +439,15 @@ function renderStageTelemetry(stages, compilation) {
   let totalMs = 0;
   (stages || []).forEach(stg => {
     totalMs += stg.duration_ms || 0;
-    const chipId = `stg${stg.name.charAt(0).toUpperCase() + stg.name.slice(1)}`;
-    setStageChip(chipId, stg.status, stg.duration_ms);
+    const chipId = STAGE_CHIP_IDS[stg.name];
+    if (!chipId) return;
+    const status = (stg.status || "pending").toLowerCase();
+    setStageChip(chipId, status === "skipped" ? "pending" : status, stg.duration_ms);
   });
 
   const badge = document.getElementById("compilerDurationBadge");
   if (badge) {
-    badge.textContent = `${totalMs.toFixed(2)} ms`;
+    badge.textContent = `${(compilation?.total_duration_ms ?? totalMs).toFixed(2)} ms`;
   }
 }
 
@@ -427,10 +456,11 @@ function renderInspectorDrawer(runRecord) {
   const list = document.getElementById("inspectorStagesList");
   if (list) {
     list.innerHTML = "";
-    (runRecord.stages || []).forEach(stg => {
+    (runRecord.compile?.stages || []).forEach(stg => {
       const item = document.createElement("div");
       item.className = "stage-detail-item";
-      const statusBadgeClass = stg.status === "completed" ? "badge-green" : (stg.status === "failed" ? "badge-red" : "badge-neutral");
+      const normalizedStatus = (stg.status || "").toLowerCase();
+      const statusBadgeClass = normalizedStatus === "completed" ? "badge-green" : (normalizedStatus === "failed" ? "badge-red" : "badge-neutral");
       
       let errorHtml = "";
       if (stg.error) {
@@ -440,7 +470,7 @@ function renderInspectorDrawer(runRecord) {
       item.innerHTML = `
         <div class="stage-top-row">
           <span class="stage-name-bold">${stg.name.toUpperCase()} STAGE</span>
-          <span class="badge ${statusBadgeClass}">${stg.status.toUpperCase()} (${(stg.duration_ms || 0).toFixed(2)} ms)</span>
+          <span class="badge ${statusBadgeClass}">${normalizedStatus.toUpperCase()} (${(stg.duration_ms || 0).toFixed(2)} ms)</span>
         </div>
         ${errorHtml}
       `;
@@ -451,20 +481,20 @@ function renderInspectorDrawer(runRecord) {
   // 2. Normalized IR tab
   const irCode = document.getElementById("inspectorIrCode");
   if (irCode) {
-    irCode.textContent = runRecord.compilation?.ir?.dump || "No IR generated.";
+    irCode.textContent = runRecord.compile?.ir?.dump || "No IR generated.";
   }
 
   // 3. AST JSON tab
   const astCode = document.getElementById("inspectorAstCode");
   if (astCode) {
-    astCode.textContent = JSON.stringify(runRecord.compilation?.ast || {}, null, 2);
+    astCode.textContent = JSON.stringify(runRecord.compile?.ast || {}, null, 2);
   }
 
   // 4. Diagnostics tab
   const diagsList = document.getElementById("inspectorDiagsList");
   if (diagsList) {
     diagsList.innerHTML = "";
-    const diags = runRecord.compilation?.diagnostics || [];
+    const diags = runRecord.compile?.diagnostics || [];
     if (diags.length === 0) {
       diagsList.innerHTML = '<div class="empty-state">No semantic or safety diagnostics issued.</div>';
     } else {
@@ -536,6 +566,7 @@ function initDrawers() {
         if (editor) {
           editor.value = appState.pendingAiPolicy;
           appState.currentSource = appState.pendingAiPolicy;
+          setEditorPolicyState("AI-generated policy — unsaved", true);
           const gutter = document.getElementById("editorLineNumbers");
           if (gutter) {
             const lines = appState.pendingAiPolicy.split("\n").length;
@@ -598,6 +629,9 @@ function closeInspectorDrawer() {
 async function handleAiGeneratePolicy() {
   const promptText = document.getElementById("aiPromptTextarea")?.value?.trim();
   if (!promptText) return;
+  appState.pendingAiPolicy = null;
+  const applyBtn = document.getElementById("aiApplyToEditorBtn");
+  if (applyBtn) applyBtn.disabled = true;
 
   const btn = document.getElementById("aiGenerateBtn");
   if (btn) {
@@ -615,18 +649,22 @@ async function handleAiGeneratePolicy() {
       body: JSON.stringify({ prompt: promptText, provider: provider }),
     });
 
+    if (!res.ok) throw new Error(`API returned ${res.status}`);
     const data = await res.json();
-    appState.pendingAiPolicy = data.source_code;
+    const usable = (data.proposal_status === "PROPOSAL_GENERATED" || data.status === "PROPOSAL_GENERATED" || data.status === "UNTRUSTED_PROPOSAL") &&
+      data.consistency_status === "MATCH" && Boolean(data.source_code);
+    appState.pendingAiPolicy = usable ? data.source_code : null;
 
     const resultBox = document.getElementById("aiProposalResult");
     const badge = document.getElementById("aiResultEngineBadge");
     const rationale = document.getElementById("aiResultRationale");
 
     if (resultBox && badge && rationale) {
-      badge.textContent = data.mode_label || "Rule Engine";
+      badge.textContent = `${data.mode_label || "Rule Engine"} · ${data.status || "UNKNOWN"}`;
       rationale.textContent = data.rationale || "No rationale provided.";
       resultBox.classList.remove("hidden");
     }
+    if (applyBtn) applyBtn.disabled = !usable;
 
   } catch (err) {
     console.error("AI generation failed", err);
@@ -653,8 +691,9 @@ function renderVerificationView(runRecord) {
 
   if (!banner || !badge || !title || !desc || !cardsContainer || !factsBody) return;
 
-  const verif = runRecord.verification || {};
-  const overall = verif.overall_verdict || "NOT RUN";
+  const verif = runRecord.check || {};
+  const verdicts = verif.verdicts || [];
+  const overall = verif.all_verified ? "VERIFIED" : (verif.has_violation ? "VIOLATED" : (verif.has_unknown ? "UNKNOWN" : "NOT RUN"));
 
   // 1. Overall Banner
   banner.className = `verdict-banner-card ${overall.toLowerCase()}`;
@@ -671,13 +710,11 @@ function renderVerificationView(runRecord) {
     desc.textContent = "SMT solver exceeded search horizon or property could not be established within bounds.";
   } else {
     title.textContent = "Compilation Issue";
-    desc.textContent = runRecord.compilation?.summary || "Fix errors to run formal verification.";
+    desc.textContent = runRecord.compile?.summary || "Fix errors to run formal verification.";
   }
 
   // 2. Individual Guarantee Cards
   cardsContainer.innerHTML = "";
-  const verdicts = verif.verdicts || [];
-
   if (verdicts.length === 0) {
     cardsContainer.innerHTML = '<div class="empty-state-box">Policy declares no formal guarantees. Add <code>guarantee no_starvation</code> or <code>guarantee min_share</code> in the editor.</div>';
   } else {
@@ -723,7 +760,7 @@ function renderVerificationView(runRecord) {
 
   // 3. Provable Facts Table
   factsBody.innerHTML = "";
-  const facts = runRecord.facts || {};
+  const facts = runRecord.analyze?.facts || {};
   if (Object.keys(facts).length === 0) {
     factsBody.innerHTML = '<tr><td colspan="6" class="empty-cell">No class facts available.</td></tr>';
   } else {
@@ -750,7 +787,7 @@ function renderVerificationView(runRecord) {
 // ============================================================================
 
 function renderSimulatorView(runRecord) {
-  const sim = runRecord.simulation || {};
+  const sim = runRecord.simulate || {};
   renderGanttChart(sim.timeline, "simGanttTimeline");
   renderSimMetricsTable(sim.per_class, "simMetricsBody");
 }
@@ -1126,8 +1163,8 @@ async function loadRecentRuns() {
 
     runs.forEach(r => {
       const tr = document.createElement("tr");
-      const verifVerdict = r.verification?.overall_verdict || "NONE";
-      const compOk = r.compilation?.ok;
+      const verifVerdict = r.all_verified ? "VERIFIED" : (r.has_violation ? "VIOLATED" : (r.has_unknown ? "UNKNOWN" : "NONE"));
+      const compOk = r.compile_ok;
 
       const compBadge = compOk ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">FAILED</span>';
       const verifBadgeClass = verifVerdict === "VERIFIED" ? "badge-green" : (verifVerdict === "VIOLATED" ? "badge-red" : "badge-neutral");
@@ -1140,7 +1177,7 @@ async function loadRecentRuns() {
         <td><strong>${escapeHtml(r.policy_name)}</strong></td>
         <td>${compBadge}</td>
         <td><span class="badge ${verifBadgeClass}">${escapeHtml(verifVerdict)}</span></td>
-        <td>${r.compilation?.ir?.guarantees?.length || 0} declared</td>
+        <td>${r.guarantees_count || 0} declared</td>
         <td>
           <button class="btn btn-ghost btn-sm" onclick="loadHistoricalRun('${r.run_id}')">View</button>
           <a class="btn btn-ghost btn-sm" href="/api/run/${r.run_id}/pdf" target="_blank" title="Download publication-grade academic PDF report">PDF</a>
@@ -1158,27 +1195,23 @@ async function loadRecentRuns() {
 window.loadHistoricalRun = async function(runId) {
   try {
     const res = await fetch(`/api/run/${runId}`);
+    if (!res.ok) throw new Error(`API returned ${res.status}`);
     const runRecord = await res.json();
-    appState.currentRunId = runRecord.run_id;
-    appState.currentRunRecord = runRecord;
 
     // Load source into editor
     const editor = document.getElementById("mainCodeEditor");
     if (editor) {
-      editor.value = runRecord.source_snapshot || "";
-      appState.currentSource = runRecord.source_snapshot || "";
+      editor.value = runRecord.source_code || "";
+      appState.currentSource = runRecord.source_code || "";
+      setEditorPolicyState("Custom policy — loaded run", true);
       const gutter = document.getElementById("editorLineNumbers");
       if (gutter) {
-        const lines = (runRecord.source_snapshot || "").split("\n").length;
+        const lines = (runRecord.source_code || "").split("\n").length;
         gutter.innerHTML = Array.from({ length: lines }, (_, i) => i + 1).join("\n");
       }
     }
 
-    renderStageTelemetry(runRecord.stages, runRecord.compilation);
-    renderInspectorDrawer(runRecord);
-    renderVerificationView(runRecord);
-    renderSimulatorView(runRecord);
-    renderEbpfSkeleton(runRecord.c_skeleton);
+    renderRunRecord(runRecord);
 
     switchView("view-editor");
   } catch (err) {
