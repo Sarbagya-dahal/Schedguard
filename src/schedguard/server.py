@@ -22,7 +22,7 @@ from .inference.providers import get_provider
 from .inference.policy_gen import propose_policy
 from .adapt import tune_policy
 from .codegen import emit_ebpf_c
-from .report import create_run_record, get_run, list_runs, generate_run_pdf
+from .report import create_run_record, get_run, list_runs, generate_run_pdf, aggregate_verdicts
 
 ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent.parent
 STUDIO_DIR = pathlib.Path(__file__).resolve().parent / "studio"
@@ -276,7 +276,8 @@ def api_run(req: SourceRequest):
         "summary": f"Compiled in {cres.total_duration_ms:.2f}ms" if cres.ok else "Compilation failed",
     }
 
-    check_data = {"verdicts": [], "all_verified": False, "has_violation": False, "has_unknown": False}
+    check_data = {"verdicts": [], "all_verified": False, "has_violation": False,
+                  "has_unknown": False, "analysis_status": "NOT_RUN"}
     analyze_data = {"facts": {}}
     sim_data = {}
     codegen_data = {}
@@ -284,14 +285,24 @@ def api_run(req: SourceRequest):
 
     if cres.ok and cres.ir:
         # Z3 Guarantee Verification
-        verdicts = check_all(cres.ir, replay=True)
-        v_dicts = [v.to_dict() for v in verdicts]
-        check_data = {
-            "verdicts": v_dicts,
-            "all_verified": bool(verdicts and all(v.status == "VERIFIED" for v in verdicts)),
-            "has_violation": any(v.status == "VIOLATED" for v in verdicts),
-            "has_unknown": any(v.status == "UNKNOWN" for v in verdicts),
-        }
+        try:
+            verdicts = check_all(cres.ir, replay=True)
+            v_dicts = [v.to_dict() for v in verdicts]
+            check_data = {
+                "verdicts": v_dicts,
+                "all_verified": bool(verdicts and all(v.status == "VERIFIED" for v in verdicts)),
+                "has_violation": any(v.status == "VIOLATED" for v in verdicts),
+                "has_unknown": any(v.status == "UNKNOWN" for v in verdicts),
+                "analysis_status": "COMPLETED",
+            }
+        except Exception as exc:
+            check_data = {"verdicts": [], "all_verified": False, "has_violation": False,
+                          "has_unknown": False, "analysis_status": "ERROR",
+                          "analysis_error": str(exc)}
+            verdicts = []
+        check_data["aggregate"] = aggregate_verdicts(
+            check_data["verdicts"], check_data.get("analysis_status"), check_data.get("analysis_error")
+        )
 
         # Analyzer facts
         analyze_data = {"facts": analyze(cres.ir)}
@@ -303,6 +314,10 @@ def api_run(req: SourceRequest):
             "horizon_ms": sim_res.horizon_ms,
             "idle_ms": sim_res.idle_ms,
             "decisions": sim_res.decisions,
+            "trace_events": len(sim_res.timeline),
+            "trace_truncated": sim_res.trace_truncated,
+            "trace_limit": sim_res.trace_limit,
+            "task_counts": sim_res.task_counts,
             "per_class": {
                 name: {
                     "cpu_ms": st.cpu_ms,
@@ -342,6 +357,12 @@ def api_get_run(run_id: str):
     run = get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+    check = run.setdefault("check", {})
+    check.setdefault("aggregate", aggregate_verdicts(
+        check.get("verdicts", []),
+        check.get("analysis_status") or ("COMPLETED" if run.get("compile", {}).get("ok") else "NOT_RUN"),
+        check.get("analysis_error"),
+    ))
     return run
 
 
@@ -381,6 +402,10 @@ def api_check(req: CheckRequest):
     has_violation = any(v.status == "VIOLATED" for v in verdicts)
     has_unknown = any(v.status == "UNKNOWN" for v in verdicts)
 
+    aggregate = aggregate_verdicts(
+        [v.to_dict() for v in verdicts],
+        "COMPLETED" if verdicts else ("COMPLETED" if res.ok else "NOT_RUN"),
+    )
     return {
         "ok": True,
         "policy_name": res.ir.name,
@@ -388,6 +413,7 @@ def api_check(req: CheckRequest):
         "all_verified": all_verified,
         "has_violation": has_violation,
         "has_unknown": has_unknown,
+        "verification": aggregate,
         "guarantee_count": len(verdicts),
     }
 
@@ -443,6 +469,10 @@ def api_simulate(req: SimulateRequest):
         "horizon_ms": sim_res.horizon_ms,
         "idle_ms": sim_res.idle_ms,
         "decisions": sim_res.decisions,
+        "trace_events": len(sim_res.timeline),
+        "trace_truncated": sim_res.trace_truncated,
+        "trace_limit": sim_res.trace_limit,
+        "task_counts": sim_res.task_counts,
         "per_class": per_class,
         "timeline": sim_res.timeline,
         "workload": [
@@ -468,16 +498,26 @@ def api_compare_sim(req: CompareSimRequest):
         "ok": True,
         "policy_a": {
             "name": r_a.ir.name,
+            "horizon_ms": sim_a.horizon_ms,
+            "trace_events": len(sim_a.timeline),
+            "trace_truncated": sim_a.trace_truncated,
+            "trace_limit": sim_a.trace_limit,
+            "task_counts": sim_a.task_counts,
             "per_class": {
-                k: {"cpu_ms": v.cpu_ms, "max_wait_ms": v.max_wait_ms, "share_pct": round(v.share_pct, 2)}
+                k: {"cpu_ms": v.cpu_ms, "max_wait_ms": v.max_wait_ms, "share_pct": round(v.share_pct, 2), "dispatches": v.dispatches}
                 for k, v in sim_a.per_class.items()
             },
             "timeline": sim_a.timeline[:400],
         },
         "policy_b": {
             "name": r_b.ir.name,
+            "horizon_ms": sim_b.horizon_ms,
+            "trace_events": len(sim_b.timeline),
+            "trace_truncated": sim_b.trace_truncated,
+            "trace_limit": sim_b.trace_limit,
+            "task_counts": sim_b.task_counts,
             "per_class": {
-                k: {"cpu_ms": v.cpu_ms, "max_wait_ms": v.max_wait_ms, "share_pct": round(v.share_pct, 2)}
+                k: {"cpu_ms": v.cpu_ms, "max_wait_ms": v.max_wait_ms, "share_pct": round(v.share_pct, 2), "dispatches": v.dispatches}
                 for k, v in sim_b.per_class.items()
             },
             "timeline": sim_b.timeline[:400],

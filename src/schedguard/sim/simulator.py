@@ -25,6 +25,9 @@ class SimResult:
     decisions: int
     per_class: dict[str, ClassStats] = field(default_factory=dict)
     timeline: list[dict] = field(default_factory=list)
+    trace_truncated: bool = False
+    trace_limit: int | None = None
+    task_counts: dict[str, int] = field(default_factory=dict)
 
 
 def simulate(ir: IRPolicy, wl: Workload, horizon_ms: int = 60_000,
@@ -35,12 +38,14 @@ def simulate(ir: IRPolicy, wl: Workload, horizon_ms: int = 60_000,
     stats = [ClassStats() for _ in cs]
     timeline: list[dict] = []
     pending, tid = [], 0
+    task_counts = {c.name: 0 for c in cs}
     for ts in wl.tasks:
         if ts.cls not in idx:
             raise KeyError(f"workload references unknown class {ts.cls}")
         for _ in range(ts.count):
             pending.append((ts.arrival_ms, tid, idx[ts.cls], BIG if ts.work_ms is None else ts.work_ms))
             tid += 1
+        task_counts[ts.cls] += ts.count
     pending.sort()
     pi, t, idle, decisions = 0, 0, 0, 0
 
@@ -109,7 +114,12 @@ def simulate(ir: IRPolicy, wl: Workload, horizon_ms: int = 60_000,
         for rs, _, _ in queues[c]:
             stats[c].max_wait_ms = max(stats[c].max_wait_ms, t - rs)
     elapsed = max(t, 1)
-    res = SimResult(horizon_ms=t, idle_ms=idle, decisions=decisions, timeline=timeline)
+    res = SimResult(
+        horizon_ms=t, idle_ms=idle, decisions=decisions, timeline=timeline,
+        trace_truncated=bool(record_trace and decisions > len(timeline)),
+        trace_limit=max_trace_events if record_trace else None,
+        task_counts=task_counts,
+    )
     for c in cs:
         stats[c.idx].share_pct = 100.0 * stats[c.idx].cpu_ms / elapsed
         res.per_class[c.name] = stats[c.idx]

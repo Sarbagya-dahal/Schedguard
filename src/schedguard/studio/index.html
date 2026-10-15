@@ -452,9 +452,19 @@
 
             <div class="gantt-scroll-container">
               <div id="simGanttTimeline" class="gantt-timeline-track">
-                <!-- Dynamically rendered slices -->
+                <!-- Compact class lanes and time axis rendered from real events. -->
               </div>
             </div>
+            <div id="simTimelineDisclosure" class="timeline-disclosure"></div>
+            <details class="dispatch-details">
+              <summary>Inspect dispatch events</summary>
+              <div class="table-wrap">
+                <table class="data-table" id="simDispatchTable">
+                  <thead><tr><th>Time</th><th>Class</th><th>Task</th><th>Run</th><th>Wait</th><th>Queue</th></tr></thead>
+                  <tbody id="simDispatchBody"><tr><td colspan="6" class="empty-cell">Run simulation to inspect dispatches.</td></tr></tbody>
+                </table>
+              </div>
+            </details>
             <div id="simTooltip" class="timeline-tooltip hidden"></div>
           </div>
 
@@ -503,6 +513,7 @@
                   <div>Batch Share: <strong id="compABatchShare" class="text-red">0.0%</strong></div>
                   <div>Batch Wait: <strong id="compABatchWait" class="text-red">10,000+ ms</strong></div>
                 </div>
+                <div id="compSummaryA" class="comp-summary"></div>
               </div>
 
               <!-- Aging Fix Outcome -->
@@ -516,6 +527,7 @@
                   <div>Batch Share: <strong id="compBBatchShare" class="text-green">35.4%</strong></div>
                   <div>Batch Wait: <strong id="compBBatchWait" class="text-green">220 ms (&le; 380ms bound)</strong></div>
                 </div>
+                <div id="compSummaryB" class="comp-summary"></div>
               </div>
             </div>
           </div>

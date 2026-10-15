@@ -14,6 +14,60 @@ RUNS_DIR.mkdir(parents=True, exist_ok=True)
 _RUNS_CACHE: dict[str, dict[str, Any]] = {}
 
 
+def aggregate_verdicts(
+    verdicts: list[dict[str, Any]] | None,
+    analysis_status: str | None = None,
+    analysis_error: str | None = None,
+) -> dict[str, Any]:
+    """Return the single source of truth for run-level guarantee status.
+
+    Compilation is deliberately excluded: this summarizes only declared
+    guarantees and the analyzer's actual execution/results.
+    """
+    items = verdicts or []
+    counts = {
+        "verified": sum(v.get("status") == "VERIFIED" for v in items),
+        "violated": sum(v.get("status") == "VIOLATED" for v in items),
+        "unknown": sum(v.get("status") == "UNKNOWN" for v in items),
+    }
+    declared = len(items)
+    if analysis_status == "ERROR" or analysis_error:
+        status = "ERROR"
+    elif declared == 0:
+        status = "NO_GUARANTEES" if analysis_status == "COMPLETED" else "NOT_RUN"
+    elif analysis_status == "NOT_RUN":
+        status = "NOT_RUN"
+    elif analysis_status is None:
+        # Backward-compatible interpretation of persisted records written
+        # before analysis_status existed: verdict rows mean analysis ran.
+        analysis_status = "COMPLETED"
+        status = "VIOLATED" if counts["violated"] else ("INCONCLUSIVE" if counts["unknown"] else "VERIFIED")
+    elif counts["violated"]:
+        status = "VIOLATED"
+    elif counts["unknown"]:
+        status = "INCONCLUSIVE"
+    elif counts["verified"] == declared:
+        status = "VERIFIED"
+    else:
+        status = "ERROR"
+    summary = {
+        "VERIFIED": f"{counts['verified']} verified",
+        "VIOLATED": f"{counts['violated']} violated",
+        "INCONCLUSIVE": f"{counts['verified']} verified, {counts['unknown']} unknown",
+        "NO_GUARANTEES": "No guarantees declared",
+        "NOT_RUN": "Guarantee analysis not run",
+        "ERROR": "Guarantee analysis error",
+    }[status]
+    return {
+        "status": status,
+        "summary": summary,
+        "declared": declared,
+        "counts": counts,
+        "analysis_status": analysis_status or "NOT_RUN",
+        "error": analysis_error or "",
+    }
+
+
 def _load_persisted_runs():
     global _RUNS_CACHE
     if not RUNS_DIR.exists():
@@ -50,7 +104,8 @@ def create_run_record(
         "policy_name": policy_name,
         "source_code": source_code,
         "compile": compile_data,
-        "check": check_data or {"verdicts": [], "all_verified": False, "has_violation": False},
+        "check": check_data or {"verdicts": [], "all_verified": False, "has_violation": False,
+                                 "has_unknown": False, "analysis_status": "NOT_RUN"},
         "analyze": analyze_data or {"facts": {}},
         "simulate": sim_data or {},
         "codegen": codegen_data or {},
@@ -61,6 +116,13 @@ def create_run_record(
             "kernel_distinction": "This formal analyzer verifies scheduling-level properties (starvation, CPU share bounds) under our formal model. It is NOT the Linux in-kernel BPF verifier (which checks register safety/memory safety). Real-kernel sched_ext loading and execution have not been attempted and remain Phase 4 objectives."
         }
     }
+    if "analysis_status" not in record["check"]:
+        record["check"]["analysis_status"] = "COMPLETED" if compile_data.get("ok") else "NOT_RUN"
+    record["check"]["aggregate"] = aggregate_verdicts(
+        record["check"].get("verdicts", []),
+        record["check"].get("analysis_status"),
+        record["check"].get("analysis_error"),
+    )
 
     _RUNS_CACHE[run_id] = record
 
@@ -102,6 +164,11 @@ def list_runs(limit: int = 20) -> list[dict[str, Any]]:
             "has_violation": r["check"].get("has_violation", False),
             "guarantees_count": len(r["check"].get("verdicts", [])),
             "sim_decisions": r["simulate"].get("decisions", 0),
+            "verification": aggregate_verdicts(
+                r["check"].get("verdicts", []),
+                r["check"].get("analysis_status"),
+                r["check"].get("analysis_error"),
+            ),
         }
         for r in runs[:limit]
     ]
@@ -140,6 +207,7 @@ class SchedLangPDF(FPDF):
 def generate_run_pdf(run: dict[str, Any]) -> bytes:
     """Renders an immutable run record into an academic, publication-quality PDF."""
     pdf = SchedLangPDF(run["run_id"], run["policy_name"], run["timestamp"])
+    pdf.set_compression(False)
     pdf.alias_nb_pages()
     pdf.add_page()
 
@@ -229,9 +297,21 @@ def generate_run_pdf(run: dict[str, Any]) -> bytes:
             pdf.cell(30, 5, c.get("kind") or "-", 1, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     # 4. Formal Guarantee Verification (Z3)
-    verdicts = run.get("check", {}).get("verdicts", [])
+    check = run.get("check", {})
+    verdicts = check.get("verdicts", [])
+    aggregate = check.get("aggregate") or aggregate_verdicts(
+        verdicts,
+        check.get("analysis_status") or ("COMPLETED" if run.get("compile", {}).get("ok") else "NOT_RUN"),
+        check.get("analysis_error"),
+    )
+    pdf.section_heading("4. Formal Guarantee Verification (Z3 SMT Solver)")
+    pdf.set_font("Helvetica", "B", 8.5)
+    pdf.set_text_color(30, 41, 59)
+    pdf.cell(0, 5, f"Overall outcome: {aggregate['status']} - {aggregate['summary']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    if aggregate.get("error"):
+        pdf.set_font("Helvetica", "", 7.5)
+        pdf.multi_cell(190, 4, f"Analyzer error: {aggregate['error']}")
     if verdicts:
-        pdf.section_heading("4. Formal Guarantee Verification (Z3 SMT Solver)")
         pdf.set_font("Helvetica", "B", 8)
         pdf.set_fill_color(226, 232, 240)
         pdf.cell(65, 5.5, "Guarantee Specification", 1, align="L", fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP)
@@ -252,8 +332,17 @@ def generate_run_pdf(run: dict[str, Any]) -> bytes:
             pdf.cell(25, 5, status, 1, align="C", new_x=XPos.RIGHT, new_y=YPos.TOP)
             pdf.set_text_color(51, 65, 85)
             pdf.cell(25, 5, f"{v.get('elapsed_ms', 0):.2f}", 1, align="R", new_x=XPos.RIGHT, new_y=YPos.TOP)
-            cex_str = f"CEx: {v.get('counterexample')} | " if v.get("counterexample") else ""
-            rep_str = (cex_str + v.get("replay", ""))[:55]
+            evidence = v.get("evidence", "")
+            if evidence == "confirmed_replay":
+                evidence_label = "Confirmed replay: "
+            elif evidence == "solver_candidate":
+                evidence_label = "Solver candidate (not confirmed): "
+            elif evidence == "not_reproduced":
+                evidence_label = "Not reproduced: "
+            else:
+                evidence_label = ""
+            cex_str = f"Candidate: {v.get('counterexample')} | " if v.get("counterexample") else ""
+            rep_str = (evidence_label + cex_str + v.get("replay", ""))[:55]
             pdf.cell(75, 5, rep_str, 1, align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     # 5. Simulator Outcome

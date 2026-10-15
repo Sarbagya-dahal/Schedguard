@@ -17,11 +17,13 @@ class Verdict:
     status: str                      # VERIFIED | VIOLATED | UNKNOWN
     counterexample: dict[str, int] | None = None
     replay: str = ""                 # human-readable replay outcome
+    evidence: str = "none"            # confirmed_replay | solver_candidate | not_reproduced | none
     elapsed_ms: float = 0.0
 
     def to_dict(self):
         return {"guarantee": self.guarantee.pretty(), "status": self.status,
                 "counterexample": self.counterexample, "replay": self.replay,
+                "evidence": self.evidence,
                 "elapsed_ms": round(self.elapsed_ms, 2)}
 
 
@@ -52,10 +54,11 @@ def check_guarantee(ir: IRPolicy, g: IRGuarantee, replay: bool = True) -> Verdic
         return Verdict(g, "VERIFIED", elapsed_ms=(time.perf_counter() - t0) * 1e3)
     if chk != z3.sat:
         return Verdict(g, "UNKNOWN", replay="solver returned unknown or inconclusive",
+                       evidence="solver_inconclusive",
                        elapsed_ms=(time.perf_counter() - t0) * 1e3)
     m = s.model()
     cex = {c.name: m.eval(n[c.idx], model_completion=True).as_long() for c in ir.classes}
-    v = Verdict(g, "UNKNOWN", cex)
+    v = Verdict(g, "UNKNOWN", cex, evidence="solver_candidate")
     if replay:
         res = simulate(ir, Workload.from_counts(cex), _replay_horizon(ir, cex))
         st = res.per_class[g.cls_name]
@@ -67,7 +70,9 @@ def check_guarantee(ir: IRPolicy, g: IRGuarantee, replay: bool = True) -> Verdic
             v.replay = f"simulated share {st.share_pct:.1f}% vs required {g.value}%"
         if confirmed:
             v.status = "VIOLATED"
+            v.evidence = "confirmed_replay"
         else:
+            v.evidence = "not_reproduced"
             v.replay += " (not reproduced: analysis is conservative here)"
     v.elapsed_ms = (time.perf_counter() - t0) * 1e3
     return v

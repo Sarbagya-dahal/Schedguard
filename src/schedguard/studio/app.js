@@ -693,30 +693,46 @@ function renderVerificationView(runRecord) {
 
   const verif = runRecord.check || {};
   const verdicts = verif.verdicts || [];
-  const overall = verif.all_verified ? "VERIFIED" : (verif.has_violation ? "VIOLATED" : (verif.has_unknown ? "UNKNOWN" : "NOT RUN"));
+  const aggregate = verif.aggregate || { status: verdicts.length ? "NOT_RUN" : "NO_GUARANTEES", summary: "" };
+  const overall = aggregate.status;
+  const displayOverall = { NO_GUARANTEES: "NO GUARANTEES", NOT_RUN: "NOT RUN", INCONCLUSIVE: "INCONCLUSIVE" }[overall] || overall;
 
   // 1. Overall Banner
   banner.className = `verdict-banner-card ${overall.toLowerCase()}`;
-  badge.textContent = overall;
+  badge.textContent = displayOverall;
 
-  if (overall === "VERIFIED") {
+  if (!runRecord.compile?.ok) {
+    title.textContent = "Compilation Issue";
+    desc.textContent = runRecord.compile?.summary || "Fix errors to run formal verification.";
+  } else if (overall === "VERIFIED") {
     title.textContent = "All Formal Guarantees Mathematically Proven Safe";
     desc.textContent = "Z3 SMT solver proved starvation freedom and/or minimum share bounds over all bounded static workloads.";
   } else if (overall === "VIOLATED") {
     title.textContent = "Formal Guarantee Violation Refuted by Z3";
     desc.textContent = "The solver synthesized a concrete counterexample workload causing starvation, confirmed via discrete simulator replay.";
-  } else if (overall === "UNKNOWN") {
+  } else if (overall === "INCONCLUSIVE") {
     title.textContent = "Verifier Inconclusive";
-    desc.textContent = "SMT solver exceeded search horizon or property could not be established within bounds.";
+    desc.textContent = aggregate.summary || "One or more guarantees are UNKNOWN; no conclusive violation was established.";
+  } else if (overall === "NO_GUARANTEES") {
+    title.textContent = "No Guarantees Declared";
+    desc.textContent = "The policy compiled successfully but does not declare a formal guarantee to analyze.";
+  } else if (overall === "NOT_RUN") {
+    title.textContent = "Guarantee Analysis Not Run";
+    desc.textContent = "Guarantees are declared, but no analyzer result is recorded for this run.";
+  } else if (overall === "ERROR") {
+    title.textContent = "Guarantee Analysis Error";
+    desc.textContent = aggregate.error || "The guarantee analyzer could not complete.";
   } else {
-    title.textContent = "Compilation Issue";
-    desc.textContent = runRecord.compile?.summary || "Fix errors to run formal verification.";
+    title.textContent = "Verification Status Unavailable";
+    desc.textContent = aggregate.summary || "No verification outcome was recorded.";
   }
 
   // 2. Individual Guarantee Cards
   cardsContainer.innerHTML = "";
   if (verdicts.length === 0) {
-    cardsContainer.innerHTML = '<div class="empty-state-box">Policy declares no formal guarantees. Add <code>guarantee no_starvation</code> or <code>guarantee min_share</code> in the editor.</div>';
+    cardsContainer.innerHTML = aggregate.status === "NO_GUARANTEES"
+      ? '<div class="empty-state-box">Policy declares no formal guarantees. Add <code>guarantee no_starvation</code> or <code>guarantee min_share</code> in the editor.</div>'
+      : '<div class="empty-state-box">Guarantee results are not available for this run.</div>';
   } else {
     verdicts.forEach(v => {
       const card = document.createElement("div");
@@ -728,16 +744,18 @@ function renderVerificationView(runRecord) {
       let counterexampleHtml = "";
       if (v.counterexample) {
         const counts = Object.entries(v.counterexample).map(([c, n]) => `${c}: ${n}`).join(", ");
+        const evidenceLabel = v.evidence === "confirmed_replay" ? "Confirmed replay workload:" : "Solver candidate workload (not confirmed):";
         counterexampleHtml = `
           <div class="counterexample-card">
-            <strong>Adversarial Counterexample Workload:</strong> { ${counts} }
+            <strong>${evidenceLabel}</strong> { ${counts} }
           </div>
         `;
       }
 
       let replayHtml = "";
       if (v.replay) {
-        replayHtml = `<div class="replay-evidence"><strong>Simulator Replay Evidence:</strong> ${escapeHtml(v.replay)}</div>`;
+        const prefix = v.evidence === "confirmed_replay" ? "Confirmed simulator replay:" : "Replay diagnostic:";
+        replayHtml = `<div class="replay-evidence"><strong>${prefix}</strong> ${escapeHtml(v.replay)}</div>`;
       }
 
       card.innerHTML = `
@@ -788,60 +806,96 @@ function renderVerificationView(runRecord) {
 
 function renderSimulatorView(runRecord) {
   const sim = runRecord.simulate || {};
-  renderGanttChart(sim.timeline, "simGanttTimeline");
+  renderGanttChart(sim.timeline, "simGanttTimeline", {
+    horizonMs: sim.horizon_ms,
+    knownClasses: Object.keys(sim.per_class || {}),
+    traceTruncated: sim.trace_truncated,
+    traceLimit: sim.trace_limit,
+    taskCounts: sim.task_counts,
+  });
+  renderDispatchDetails(sim.timeline, sim.trace_truncated);
   renderSimMetricsTable(sim.per_class, "simMetricsBody");
 }
 
-function renderGanttChart(timeline, containerId) {
+function renderGanttChart(timeline, containerId, options = {}) {
   const container = document.getElementById(containerId);
   if (!container) return;
   container.innerHTML = "";
 
-  if (!timeline || timeline.length === 0) {
-    container.innerHTML = '<div class="empty-state">No timeline events recorded. Run simulation to observe execution.</div>';
+  const events = timeline || [];
+  const classes = options.knownClasses || [...new Set(events.map(ev => ev.class_name))];
+  if (events.length === 0 && classes.length === 0) {
+    container.innerHTML = '<div class="empty-state">No dispatch events recorded in the available trace.</div>';
     return;
   }
 
+  const horizon = Math.max(1, options.horizonMs || Math.max(...events.map(ev => ev.end_ms || 0), 1));
+  const axis = document.createElement("div");
+  axis.className = "timeline-axis";
+  [0, 25, 50, 75, 100].forEach(percent => {
+    const tick = document.createElement("span");
+    tick.className = "timeline-tick";
+    tick.style.left = `${percent}%`;
+    tick.textContent = `${Math.round(horizon * percent / 100)} ms`;
+    axis.appendChild(tick);
+  });
+  container.appendChild(axis);
   const tooltip = document.getElementById("simTooltip");
-
-  timeline.slice(0, 150).forEach(ev => {
-    const slice = document.createElement("div");
-    const clsName = (ev.class_name || "default").toLowerCase();
-    const isBoosted = Boolean(ev.boosted);
-
-    slice.className = `gantt-slice ${clsName} ${isBoosted ? "boosted" : ""}`;
-    const widthPx = Math.max(22, Math.min(110, (ev.duration_ms || 10) * 3.2));
-    slice.style.width = `${widthPx}px`;
-
-    slice.innerHTML = `
-      ${isBoosted ? '<span class="boost-star" title="Promoted via aging threshold!">★</span>' : ""}
-      <span>${escapeHtml(ev.class_name)}</span>
-      <span style="font-size: 8px; opacity: 0.8;">#${ev.task_id}</span>
-    `;
-
-    if (tooltip) {
-      slice.addEventListener("mouseenter", (e) => {
-        tooltip.classList.remove("hidden");
-        tooltip.innerHTML = `
-          <strong>${escapeHtml(ev.class_name)}</strong> (Task #${ev.task_id})<br>
-          Execution: ${ev.start_ms}ms &rarr; ${ev.end_ms}ms (${ev.duration_ms}ms)<br>
-          Observed Wait: <strong>${ev.wait_ms} ms</strong><br>
-          Priority Tier: ${ev.prio} ${isBoosted ? "<strong>(BOOSTED via Aging)</strong>" : ""}<br>
-          Queue Depths: ${JSON.stringify(ev.queue_sizes || {})}
-        `;
-      });
-
-      slice.addEventListener("mousemove", (e) => {
-        tooltip.style.left = `${e.clientX + 14}px`;
-        tooltip.style.top = `${e.clientY + 14}px`;
-      });
-
-      slice.addEventListener("mouseleave", () => {
-        tooltip.classList.add("hidden");
-      });
+  classes.forEach(className => {
+    const lane = document.createElement("div");
+    lane.className = "timeline-lane";
+    const label = document.createElement("div");
+    label.className = "timeline-lane-label";
+    label.textContent = className;
+    const track = document.createElement("div");
+    track.className = "timeline-lane-track";
+    const classEvents = events.filter(ev => ev.class_name === className);
+    if (classEvents.length === 0) {
+      const waiting = document.createElement("div");
+      waiting.className = "timeline-waiting";
+      const taskCount = options.taskCounts?.[className] || 0;
+      waiting.textContent = options.traceTruncated
+        ? "No service in available trace (trace truncated)"
+        : (taskCount > 0 ? "No CPU service (waiting/starved)" : "No runnable tasks");
+      track.appendChild(waiting);
     }
+    classEvents.forEach(ev => {
+      const block = document.createElement("div");
+      const clsName = (ev.class_name || "default").toLowerCase();
+      block.className = `timeline-block ${clsName} ${ev.boosted ? "boosted" : ""}`;
+      block.style.left = `${Math.max(0, ev.start_ms / horizon * 100)}%`;
+      block.style.width = `${Math.max(0.25, (ev.duration_ms || 0) / horizon * 100)}%`;
+      if (tooltip) {
+        block.addEventListener("mouseenter", () => {
+          tooltip.classList.remove("hidden");
+          tooltip.innerHTML = `<strong>${escapeHtml(ev.class_name)}</strong> (Task #${ev.task_id})<br>Execution: ${ev.start_ms}ms &rarr; ${ev.end_ms}ms (${ev.duration_ms}ms)<br>Observed wait: <strong>${ev.wait_ms}ms</strong><br>Priority: ${ev.prio}${ev.boosted ? " <strong>(aged/boosted)</strong>" : ""}`;
+        });
+        block.addEventListener("mousemove", e => { tooltip.style.left = `${e.clientX + 14}px`; tooltip.style.top = `${e.clientY + 14}px`; });
+        block.addEventListener("mouseleave", () => tooltip.classList.add("hidden"));
+      }
+      track.appendChild(block);
+    });
+    lane.append(label, track);
+    container.appendChild(lane);
+  });
+  const disclosure = document.getElementById("simTimelineDisclosure");
+  if (disclosure) disclosure.textContent = options.traceTruncated
+    ? `Overview covers the first ${options.traceLimit || events.length} dispatch events; the detail table exposes the same available trace window.`
+    : `Full simulation trace shown: ${events.length} dispatch events across ${horizon} ms.`;
+}
 
-    container.appendChild(slice);
+function renderDispatchDetails(timeline, truncated) {
+  const body = document.getElementById("simDispatchBody");
+  if (!body) return;
+  body.innerHTML = "";
+  if (!timeline || timeline.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" class="empty-cell">No dispatch events recorded.</td></tr>';
+    return;
+  }
+  timeline.forEach(ev => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${ev.start_ms}&ndash;${ev.end_ms} ms</td><td>${escapeHtml(ev.class_name)}</td><td>#${ev.task_id}</td><td>${ev.duration_ms} ms</td><td>${ev.wait_ms} ms</td><td>${escapeHtml(JSON.stringify(ev.queue_sizes || {}))}</td>`;
+    body.appendChild(tr);
   });
 }
 
@@ -888,13 +942,14 @@ async function runSimulation() {
   if (!code) return;
 
   const preset = document.getElementById("simWorkloadSelect")?.value || "web_batch";
+  const availableClasses = (appState.currentRunRecord?.compile?.ir?.classes || []).map(c => c.name);
   let workload = null;
-  if (preset === "heavy_web") {
-    workload = { tasks: [{ class: "web", count: 8 }, { class: "batch", count: 2 }] };
-  } else if (preset === "single_batch") {
-    workload = { tasks: [{ class: "web", count: 2 }, { class: "batch", count: 1 }] };
-  } else {
-    workload = { tasks: [{ class: "web", count: 4 }, { class: "batch", count: 4 }] };
+  const requested = preset === "heavy_web"
+    ? { web: 8, batch: 2 }
+    : (preset === "single_batch" ? { web: 2, batch: 1 } : { web: 4, batch: 4 });
+  if (availableClasses.length > 0) {
+    const tasks = availableClasses.map(name => ({ class: name, count: requested[name] || 2 }));
+    workload = { tasks };
   }
 
   try {
@@ -929,13 +984,26 @@ async function runDifferentialComparison() {
       body: JSON.stringify({
         policy_a: strictCode,
         policy_b: agingCode,
+        workload: { tasks: [{ class: "web", count: 4 }, { class: "batch", count: 4 }] },
         horizon_ms: 10000,
       }),
     });
 
     const data = await res.json();
-    renderGanttChart(data.policy_a.timeline, "compTimelineA");
-    renderGanttChart(data.policy_b.timeline, "compTimelineB");
+    renderGanttChart(data.policy_a.timeline, "compTimelineA", {
+      horizonMs: data.policy_a.horizon_ms || 10000,
+      knownClasses: Object.keys(data.policy_a.per_class || {}),
+      traceTruncated: data.policy_a.trace_truncated,
+      traceLimit: data.policy_a.trace_limit,
+      taskCounts: data.policy_a.task_counts,
+    });
+    renderGanttChart(data.policy_b.timeline, "compTimelineB", {
+      horizonMs: data.policy_b.horizon_ms || 10000,
+      knownClasses: Object.keys(data.policy_b.per_class || {}),
+      traceTruncated: data.policy_b.trace_truncated,
+      traceLimit: data.policy_b.trace_limit,
+      taskCounts: data.policy_b.task_counts,
+    });
 
     const aBatch = data.policy_a.per_class?.batch;
     const bBatch = data.policy_b.per_class?.batch;
@@ -949,9 +1017,20 @@ async function runDifferentialComparison() {
       document.getElementById("compBBatchShare").textContent = `${bBatch.share_pct}% (Protected)`;
       document.getElementById("compBBatchWait").textContent = `${bBatch.max_wait_ms} ms (Bounded)`;
     }
+    renderComparisonSummary(data.policy_a, "compSummaryA");
+    renderComparisonSummary(data.policy_b, "compSummaryB");
   } catch (err) {
     console.error("Comparison error", err);
   }
+}
+
+function renderComparisonSummary(policy, elementId) {
+  const target = document.getElementById(elementId);
+  if (!target) return;
+  const rows = Object.entries(policy.per_class || {}).map(([name, stats]) =>
+    `${escapeHtml(name)}: ${stats.cpu_ms}ms CPU · ${stats.share_pct}% share · max wait ${stats.max_wait_ms}ms · ${stats.dispatches} dispatches`
+  );
+  target.textContent = `Workload: 4 web + 4 batch · Horizon: ${policy.horizon_ms}ms — ${rows.join(" | ")}`;
 }
 
 // ============================================================================
@@ -1163,11 +1242,12 @@ async function loadRecentRuns() {
 
     runs.forEach(r => {
       const tr = document.createElement("tr");
-      const verifVerdict = r.all_verified ? "VERIFIED" : (r.has_violation ? "VIOLATED" : (r.has_unknown ? "UNKNOWN" : "NONE"));
+      const verification = r.verification || {};
+      const verifVerdict = verification.status || "NOT RUN";
       const compOk = r.compile_ok;
 
       const compBadge = compOk ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">FAILED</span>';
-      const verifBadgeClass = verifVerdict === "VERIFIED" ? "badge-green" : (verifVerdict === "VIOLATED" ? "badge-red" : "badge-neutral");
+      const verifBadgeClass = verifVerdict === "VERIFIED" ? "badge-green" : (verifVerdict === "VIOLATED" ? "badge-red" : (verifVerdict === "INCONCLUSIVE" ? "badge-amber" : "badge-neutral"));
 
       const ts = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : "&mdash;";
 
@@ -1176,7 +1256,7 @@ async function loadRecentRuns() {
         <td>${ts}</td>
         <td><strong>${escapeHtml(r.policy_name)}</strong></td>
         <td>${compBadge}</td>
-        <td><span class="badge ${verifBadgeClass}">${escapeHtml(verifVerdict)}</span></td>
+        <td><span class="badge ${verifBadgeClass}">${escapeHtml(verifVerdict)}</span><small>${escapeHtml(verification.summary || "")}</small></td>
         <td>${r.guarantees_count || 0} declared</td>
         <td>
           <button class="btn btn-ghost btn-sm" onclick="loadHistoricalRun('${r.run_id}')">View</button>
