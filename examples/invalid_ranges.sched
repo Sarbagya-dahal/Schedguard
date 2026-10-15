@@ -1,0 +1,6 @@
+// Rejected by the safety pass before any verification runs.
+policy invalid_ranges {
+  class a { prio 9; quantum 0 ms; }
+  class a { prio 1; quantum 5 ms; }
+  guarantee min_share(ghost, 150 %);
+}

@@ -1,0 +1,7 @@
+{
+  "goal": "Keep the web tier responsive under load, but batch jobs must still finish; never let them starve for more than a couple of seconds.",
+  "classes": {
+    "web":   {"cpu_pct": 30, "runnable_avg": 4, "pattern": "bursty interactive latency-sensitive request handlers"},
+    "batch": {"cpu_pct": 60, "runnable_avg": 4, "pattern": "long running background batch jobs"}
+  }
+}

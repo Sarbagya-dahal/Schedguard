@@ -1,0 +1,104 @@
+{
+  "loc_src_nonblank": 852,
+  "pytest_summary": "28 passed in 0.99s",
+  "corpus": [
+    {
+      "policy": "aging_fix",
+      "frontend_ms": 0.29,
+      "verify_ms": 10.6,
+      "verdicts": [
+        "VERIFIED",
+        "VERIFIED"
+      ]
+    },
+    {
+      "policy": "balanced",
+      "frontend_ms": 0.32,
+      "verify_ms": 8.3,
+      "verdicts": [
+        "VERIFIED",
+        "VIOLATED"
+      ]
+    },
+    {
+      "policy": "invalid_ranges",
+      "frontend_ms": 0.34,
+      "outcome": "REJECTED by safety pass",
+      "diagnostics": [
+        "E006",
+        "E007",
+        "E004",
+        "E009",
+        "E010"
+      ]
+    },
+    {
+      "policy": "strict_starves",
+      "frontend_ms": 0.19,
+      "verify_ms": 9.8,
+      "verdicts": [
+        "VIOLATED"
+      ]
+    },
+    {
+      "policy": "three_tier",
+      "frontend_ms": 0.68,
+      "verify_ms": 30.4,
+      "verdicts": [
+        "UNKNOWN",
+        "UNKNOWN",
+        "VERIFIED"
+      ]
+    }
+  ],
+  "scalability": [
+    {
+      "classes": 2,
+      "ms_per_guarantee_mean": 2.82,
+      "ms_per_guarantee_max": 2.93
+    },
+    {
+      "classes": 4,
+      "ms_per_guarantee_mean": 3.19,
+      "ms_per_guarantee_max": 3.29
+    },
+    {
+      "classes": 8,
+      "ms_per_guarantee_mean": 3.79,
+      "ms_per_guarantee_max": 3.98
+    },
+    {
+      "classes": 16,
+      "ms_per_guarantee_mean": 5.31,
+      "ms_per_guarantee_max": 5.53
+    }
+  ],
+  "soundness": {
+    "trials": 2000,
+    "finite_class_checks": 4287,
+    "bound_violations": 0,
+    "share_floor_violations": 0,
+    "starved_class_checks": 1069,
+    "starved_confirmed": 1069,
+    "mean_tightness": 0.963,
+    "median_tightness": 1.0
+  },
+  "verification_gate": {
+    "random_guarantees": 250,
+    "verified": 124,
+    "violated_confirmed_by_replay": 107,
+    "unknown_conservative": 19,
+    "random_workload_attacks_on_verified": 496,
+    "false_accepts": 0
+  },
+  "inference_pipeline_stub": {
+    "proposed": 2,
+    "rejected_by_schema": 0,
+    "verified": 1,
+    "violated": 0,
+    "statuses": [
+      "UNKNOWN",
+      "VERIFIED"
+    ]
+  }
+}

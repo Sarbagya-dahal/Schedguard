@@ -1,0 +1,7 @@
+// Classic strict priority with no aging: batch can starve forever.
+policy strict_starves {
+  option max_tasks = 8;
+  class web   { prio 0; quantum 5 ms;  kind interactive; }
+  class batch { prio 1; quantum 20 ms; kind batch; }
+  guarantee no_starvation(batch, 1000 ms);
+}

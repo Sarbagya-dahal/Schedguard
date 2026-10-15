@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SchedLang Studio — Research Workbench</title>
+  <meta name="description" content="Research workbench for SchedLang: an AI-driven DSL compiler with deterministic Z3 formal guarantee analysis and Linux sched_ext eBPF scheduling backend.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="theme-light">
+  <div class="workbench-layout">
+    
+    <!-- Collapsible Left Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">SL</div>
+        <div class="brand-text">
+          <span class="brand-title">SchedLang</span>
+          <span class="brand-edition">Research Studio</span>
+        </div>
+        <button id="sidebarToggleBtn" class="sidebar-toggle-btn" title="Toggle sidebar (Ctrl+B)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="view-overview">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span class="nav-label">Research Overview</span>
+        </button>
+
+        <button class="nav-item" data-view="view-editor">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <span class="nav-label">Policy Editor</span>
+        </button>
+
+        <button class="nav-item" data-view="view-verification">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span class="nav-label">Analysis & Verification</span>
+        </button>
+
+        <button class="nav-item" data-view="view-simulator">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span class="nav-label">Workload Simulator</span>
+        </button>
+
+        <button class="nav-item" data-view="view-tuning">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span class="nav-label">Adaptive Tuning</span>
+        </button>
+
+        <button class="nav-item" data-view="view-code">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span class="nav-label">Code Explorer</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Light / Dark theme">
+          <span class="theme-icon">☼</span>
+          <span class="nav-label theme-label">Dark Theme</span>
+        </button>
+        <button id="helpTourBtn" class="help-btn" title="Open Guided Demonstration Walkthrough">
+          <span class="help-icon">?</span>
+          <span class="nav-label">Demonstration Guide</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Container -->
+    <div class="workbench-main">
+
+      <!-- ============================================================== -->
+      <!-- VIEW 1: RESEARCH OVERVIEW (LANDING PAGE) -->
+      <!-- ============================================================== -->
+      <section id="view-overview" class="view-panel active">
+        <div class="overview-header">
+          <div class="overview-title-block">
+            <h1 class="page-title">An AI-Driven DSL Compiler for Adaptive eBPF Scheduling</h1>
+            <p class="page-subtitle">
+              SchedLang ensures AI-synthesized scheduling policies are <em>safe by construction</em>. An operator or AI agent writes policies in PolicyLang. The compiler lowers them to fixed-size IR, enforcible bounds are verified via static safety passes, and a Z3-based SMT verifier proves starvation freedom and CPU share bounds over all static workloads before simulation or eBPF code generation.
+            </p>
+          </div>
+          <div class="overview-cta">
+            <button class="btn btn-primary btn-lg" onclick="switchView('view-editor')">Open Policy Editor &rarr;</button>
+          </div>
+        </div>
+
+        <div class="overview-grid">
+          <!-- Implementation Summary Card -->
+          <div class="overview-card">
+            <div class="card-header-clean">
+              <span class="card-eyebrow">Project Foundation</span>
+              <h2 class="card-title">Implementation Status</h2>
+            </div>
+            <div class="progress-indicator-block">
+              <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" style="width: 25%;"></div>
+              </div>
+              <div class="progress-caption">
+                <strong>Approximately 25% complete</strong> &mdash; effort-weighted project estimate per ROADMAP.md.
+              </div>
+            </div>
+            <p class="card-body-text">
+              <strong>Phase 1 scope implemented:</strong> Lexer, LL(1) recursive-descent parser, static safety bounds pass (E001&ndash;E013), fixed-size IR, Z3 closed-form wait-bound verifier, discrete-event simulator with timeline tracing, offline rule baseline, and eBPF C skeleton emitter.
+            </p>
+            <div class="card-footer-actions">
+              <a href="#" onclick="switchView('view-code'); return false;" class="text-link">Inspect repository source code &rarr;</a>
+            </div>
+          </div>
+
+          <!-- Shortcuts & Tool Summary Card -->
+          <div class="overview-card">
+            <div class="card-header-clean">
+              <span class="card-eyebrow">Workbench Capabilities</span>
+              <h2 class="card-title">Research Workspaces</h2>
+            </div>
+            <ul class="shortcuts-list">
+              <li>
+                <a href="#" onclick="switchView('view-editor'); return false;">
+                  <strong>Policy Editor:</strong> Edit PolicyLang policies with syntax checks, compiler stage telemetry, and collapsible AI proposer.
+                </a>
+              </li>
+              <li>
+                <a href="#" onclick="switchView('view-verification'); return false;">
+                  <strong>Analysis & Verification:</strong> Inspect Z3 SMT proofs, worst-case wait bounds, counterexample workloads, and replay evidence.
+                </a>
+              </li>
+              <li>
+                <a href="#" onclick="switchView('view-simulator'); return false;">
+                  <strong>Workload Simulator:</strong> Gantt execution timeline showing queue states, aging promotions, and strict vs aging comparison.
+                </a>
+              </li>
+              <li>
+                <a href="#" onclick="switchView('view-tuning'); return false;">
+                  <strong>Adaptive Tuning:</strong> Sweep candidate parameter ranges, reject violating values, and select verified frontiers.
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Recent Experimental Runs Table -->
+        <div class="runs-history-card">
+          <div class="history-header">
+            <div>
+              <h2 class="card-title">Recent Experimental Runs</h2>
+              <span class="history-subtitle">Immutable records of policy compilation, Z3 proofs, and simulator outcomes.</span>
+            </div>
+            <button id="refreshRunsBtn" class="btn btn-sm btn-secondary">Refresh History</button>
+          </div>
+
+          <div class="table-wrap">
+            <table class="data-table" id="recentRunsTable">
+              <thead>
+                <tr>
+                  <th>Run ID</th>
+                  <th>Timestamp</th>
+                  <th>Policy</th>
+                  <th>Compilation</th>
+                  <th>Verification Verdict</th>
+                  <th>Guarantees</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="recentRunsBody">
+                <tr><td colspan="7" class="empty-cell">No runs executed yet in this session. Open the Policy Editor to compile your first policy.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 2: POLICY EDITOR (PRIORITIZING THE CODE) -->
+      <!-- ============================================================== -->
+      <section id="view-editor" class="view-panel hidden">
+        <div class="editor-workspace">
+          
+          <!-- Compact Editor Toolbar -->
+          <div class="editor-toolbar">
+            <div class="toolbar-left">
+              <button id="editorCompileBtn" class="btn btn-primary" title="Execute full compilation, Z3 verification, and trace (Ctrl+Enter)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Compile & Run</span>
+              </button>
+
+              <div class="select-wrapper">
+                <select id="editorExampleSelect" class="select-field" title="Load predefined policy example">
+                  <option value="aging_fix">aging_fix.sched (Aging Fix)</option>
+                  <option value="strict_starves">strict_starves.sched (Strict Priority Starves)</option>
+                  <option value="balanced">balanced.sched (Equal Tier Round-Robin)</option>
+                  <option value="three_tier">three_tier.sched (Three Tier RT/Web/ML)</option>
+                  <option value="invalid_ranges">invalid_ranges.sched (Safety Pass Rejection)</option>
+                </select>
+              </div>
+
+              <button id="editorFormatBtn" class="btn btn-secondary btn-sm" title="Reformat SchedLang code">Format</button>
+              <button id="editorResetBtn" class="btn btn-secondary btn-sm" title="Reset editor to example defaults">Reset</button>
+
+              <!-- Compact Real Compilation Stage Telemetry -->
+              <div id="compilerStagesBar" class="compiler-stages-bar">
+                <span class="stages-label">Compiler:</span>
+                <span id="stgLexer" class="stage-chip pending" title="Lexical analysis">Lexer</span>
+                <span class="stage-sep">&rarr;</span>
+                <span id="stgParser" class="stage-chip pending" title="LL(1) recursive descent parser">Parser</span>
+                <span class="stage-sep">&rarr;</span>
+                <span id="stgSafety" class="stage-chip pending" title="Static safety pass">Safety</span>
+                <span class="stage-sep">&rarr;</span>
+                <span id="stgIR" class="stage-chip pending" title="IR lowering">IR</span>
+                <span id="compilerDurationBadge" class="duration-badge">&mdash;</span>
+              </div>
+            </div>
+
+            <div class="toolbar-right">
+              <button id="toggleInspectorBtn" class="btn btn-secondary btn-sm" title="Toggle detailed compiler inspector drawer">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>Stage Inspector</span>
+              </button>
+              <button id="toggleAiPanelBtn" class="btn btn-secondary btn-sm" title="Toggle AI Proposal Builder">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                <span>AI Proposer</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Main Editor Surface & Drawers -->
+          <div class="editor-surface-container">
+            
+            <!-- Code Canvas -->
+            <div class="code-canvas-wrap">
+              <div class="code-line-numbers" id="editorLineNumbers">1</div>
+              <textarea id="mainCodeEditor" class="main-code-editor" spellcheck="false" wrap="off"></textarea>
+            </div>
+
+            <!-- Collapsible AI Assistance Drawer (Closed by default) -->
+            <aside id="aiDrawer" class="ai-drawer hidden">
+              <div class="drawer-header">
+                <div class="drawer-title-group">
+                  <h3 class="drawer-title">Natural-Language Policy Proposer</h3>
+                  <span class="untrusted-tag" title="AI proposals are untrusted until verified by Z3">UNTRUSTED PROPOSAL</span>
+                </div>
+                <button id="closeAiDrawerBtn" class="icon-close-btn">&times;</button>
+              </div>
+
+              <div class="drawer-body">
+                <div class="form-group">
+                  <label for="aiPromptTextarea" class="field-label">Natural Language Scheduling Objective:</label>
+                  <textarea id="aiPromptTextarea" class="text-area-input" rows="4" placeholder="Describe requirement, e.g. Prioritize interactive web tasks, give batch tasks a longer time quantum, and prevent batch starvation with a maximum waiting-time requirement of 400 milliseconds.">Prioritize interactive web tasks, give batch tasks a longer time quantum, and prevent batch starvation with a maximum waiting-time requirement of 400 milliseconds.</textarea>
+                </div>
+
+                <div class="form-group">
+                  <label class="field-label">Proposer Engine Mode:</label>
+                  <div class="radio-group">
+                    <label class="radio-item">
+                      <input type="radio" name="aiProviderRadio" value="rules" checked>
+                      <span>Deterministic Rule Engine (Offline)</span>
+                    </label>
+                    <label class="radio-item" title="Requires ANTHROPIC_API_KEY">
+                      <input type="radio" name="aiProviderRadio" value="anthropic">
+                      <span>Anthropic Claude (Live LLM)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <button id="aiGenerateBtn" class="btn btn-primary btn-block">Generate SchedLang Proposal</button>
+
+                <!-- Proposal Preview & Rationale -->
+                <div id="aiProposalResult" class="ai-proposal-result hidden">
+                  <div class="result-header">
+                    <span class="result-title">Proposal Rationale</span>
+                    <span id="aiResultEngineBadge" class="badge-neutral">Rule Engine</span>
+                  </div>
+                  <p id="aiResultRationale" class="result-rationale-text"></p>
+                  <div class="proposal-actions">
+                    <button id="aiApplyToEditorBtn" class="btn btn-secondary btn-sm">Insert into Editor &rarr;</button>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <!-- Detailed Compilation Inspector Drawer -->
+            <aside id="inspectorDrawer" class="inspector-drawer hidden">
+              <div class="drawer-header">
+                <h3 class="drawer-title">Compiler Stage Telemetry & Intermediate Data</h3>
+                <button id="closeInspectorBtn" class="icon-close-btn">&times;</button>
+              </div>
+
+              <div class="drawer-body">
+                <!-- Executed Stages List -->
+                <div class="inspector-section">
+                  <h4 class="inspector-subtitle">Executed Stages & Real Latency</h4>
+                  <div id="inspectorStagesList" class="stages-detail-list">
+                    <!-- Populated dynamically -->
+                  </div>
+                </div>
+
+                <!-- Intermediate Output Tabs -->
+                <div class="inspector-section">
+                  <div class="inspector-tab-bar">
+                    <button class="subtab-btn active" data-subtab="subtab-ir">Normalized IR</button>
+                    <button class="subtab-btn" data-subtab="subtab-ast">AST (JSON)</button>
+                    <button class="subtab-btn" data-subtab="subtab-diags">Diagnostics</button>
+                  </div>
+
+                  <div id="subtab-ir" class="subtab-content active">
+                    <pre><code id="inspectorIrCode">Compile a policy to inspect IR.</code></pre>
+                  </div>
+                  <div id="subtab-ast" class="subtab-content hidden">
+                    <pre><code id="inspectorAstCode">Compile a policy to inspect AST.</code></pre>
+                  </div>
+                  <div id="subtab-diags" class="subtab-content hidden">
+                    <div id="inspectorDiagsList" class="diags-list">No diagnostics.</div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+          </div>
+
+          <!-- Bottom Editor Status & Quick Action Bar -->
+          <div class="editor-footer-bar">
+            <div class="footer-left">
+              <span id="editorStatusText" class="status-message">Ready</span>
+            </div>
+            <div class="footer-right">
+              <button id="footerDownloadPdfBtn" class="btn btn-ghost btn-sm" disabled title="Download academic PDF report for the current compilation">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Download PDF Report</span>
+              </button>
+              <button class="btn btn-ghost btn-sm" onclick="switchView('view-verification')">View Verification Details &rarr;</button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 3: ANALYSIS & VERIFICATION -->
+      <!-- ============================================================== -->
+      <section id="view-verification" class="view-panel hidden">
+        <div class="section-container">
+          
+          <div class="section-header-bar">
+            <div>
+              <h2 class="section-heading">Formal Guarantee Analysis & Verification</h2>
+              <p class="section-subheading">
+                Proves or refutes scheduling-level guarantees over all static workloads bounded by max_tasks using Z3 SMT solving.
+              </p>
+            </div>
+            <div class="section-actions">
+              <button id="verifDownloadPdfBtn" class="btn btn-secondary btn-sm" disabled>Download PDF Report</button>
+              <button id="recheckVerifBtn" class="btn btn-primary btn-sm">Re-verify Guarantees</button>
+            </div>
+          </div>
+
+          <!-- Technical Model Scope & Disclaimer -->
+          <div class="scope-callout">
+            <div class="scope-title">Formal Model Assumptions & Technical Scope</div>
+            <p class="scope-desc">
+              1. <strong>Workload Model:</strong> Single-CPU, non-preemptive static CPU-bound tasks. Quanta and aging are discrete. Proof covers all workloads $0 \le n_j \le \text{max\_tasks}$ with $n_i \ge 1$.<br>
+              2. <strong>Analyzer Type:</strong> Custom SMT scheduler analyzer implemented in Z3 over linear integer arithmetic. Refutations are cross-checked via concrete discrete simulation replay.<br>
+              3. <strong>Kernel Distinction:</strong> This scheduling verifier is <em>not</em> the Linux in-kernel BPF verifier (which verifies load-time register/memory safety). Real-kernel behavior remains untested until Phase 4 live loading.
+            </p>
+          </div>
+
+          <!-- Overall Verdict Banner -->
+          <div id="overallVerdictBanner" class="verdict-banner-card neutral">
+            <div class="verdict-badge-lg" id="verdictBadgeText">NOT RUN</div>
+            <div class="verdict-banner-details">
+              <h3 id="verdictBannerTitle" class="verdict-title">No Policy Compiled</h3>
+              <p id="verdictBannerDesc" class="verdict-desc">Compile a SchedLang policy in the editor to evaluate formal guarantees.</p>
+            </div>
+          </div>
+
+          <!-- Individual Guarantee Cards -->
+          <div class="subsection-block">
+            <h3 class="subsection-title">Evaluated Guarantees</h3>
+            <div id="verificationCardsContainer" class="guarantee-cards-stack">
+              <div class="empty-state-box">Compile a policy declaring guarantees to inspect proof outcomes.</div>
+            </div>
+          </div>
+
+          <!-- Provable Frontiers Table -->
+          <div class="subsection-block">
+            <h3 class="subsection-title">Provable Worst-Case Frontiers (Z3 Optimization)</h3>
+            <div class="table-wrap">
+              <table class="data-table" id="provableFactsTable">
+                <thead>
+                  <tr>
+                    <th>Class</th>
+                    <th>Priority Tier</th>
+                    <th>Quantum</th>
+                    <th>Aging Threshold</th>
+                    <th>Tightest Worst-Case Wait Bound</th>
+                    <th>Guaranteed Min CPU Share</th>
+                  </tr>
+                </thead>
+                <tbody id="provableFactsBody">
+                  <tr><td colspan="6" class="empty-cell">No analysis facts computed yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 4: WORKLOAD SIMULATOR -->
+      <!-- ============================================================== -->
+      <section id="view-simulator" class="view-panel hidden">
+        <div class="section-container">
+          
+          <div class="section-header-bar">
+            <div>
+              <h2 class="section-heading">CPU Scheduler Simulator</h2>
+              <p class="section-subheading">
+                Single-CPU discrete-event simulation implementing exact scheduler semantics: priority tiers, FIFO within tiers, and aging boosts.
+              </p>
+            </div>
+            <div class="section-actions">
+              <div class="select-wrapper">
+                <select id="simWorkloadSelect" class="select-field-sm">
+                  <option value="web_batch">4 Web + 4 Batch (Balanced)</option>
+                  <option value="heavy_web">8 Web + 2 Batch (Heavy Interactive)</option>
+                  <option value="single_batch">2 Web + 1 Batch (Asymmetric)</option>
+                </select>
+              </div>
+              <button id="simRunBtn" class="btn btn-primary btn-sm">Run Simulation</button>
+            </div>
+          </div>
+
+          <!-- Gantt Timeline Visualization -->
+          <div class="simulator-card">
+            <div class="card-header-clean flex-between">
+              <div>
+                <h3 class="card-title">Execution Dispatch Timeline (Gantt)</h3>
+                <span class="card-caption">Horizontal axis: time in milliseconds. Slices represent non-preemptive quantum execution.</span>
+              </div>
+              <div class="timeline-legend">
+                <span class="legend-chip web-chip">web</span>
+                <span class="legend-chip batch-chip">batch</span>
+                <span class="legend-chip rt-chip">rt</span>
+                <span class="legend-chip boosted-chip">&star; Boosted</span>
+              </div>
+            </div>
+
+            <div class="gantt-scroll-container">
+              <div id="simGanttTimeline" class="gantt-timeline-track">
+                <!-- Dynamically rendered slices -->
+              </div>
+            </div>
+            <div id="simTooltip" class="timeline-tooltip hidden"></div>
+          </div>
+
+          <!-- Observed Metrics Table -->
+          <div class="subsection-block">
+            <h3 class="subsection-title">Measured Simulation Telemetry</h3>
+            <div class="table-wrap">
+              <table class="data-table" id="simMetricsTable">
+                <thead>
+                  <tr>
+                    <th>Class Name</th>
+                    <th>CPU Runtime (ms)</th>
+                    <th>Effective CPU Share (%)</th>
+                    <th>Max Observed Wait (ms)</th>
+                    <th>Total Dispatches</th>
+                  </tr>
+                </thead>
+                <tbody id="simMetricsBody">
+                  <tr><td colspan="5" class="empty-cell">Run simulation to inspect measured outcomes.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Differential Comparison Section -->
+          <div class="subsection-block">
+            <div class="comparison-banner">
+              <div>
+                <h3 class="subsection-title">Comparative Analysis: Strict Priority vs. Aging Fix</h3>
+                <p class="card-caption">
+                  Direct differential test running both policies on the identical workload (4 Web + 4 Batch). Illustrates starvation prevention via aging.
+                </p>
+              </div>
+              <button id="simCompareBtn" class="btn btn-secondary btn-sm">Run Side-by-Side Comparison</button>
+            </div>
+
+            <div class="comparison-grid">
+              <!-- Strict Priority Outcome -->
+              <div class="comparison-card">
+                <div class="comp-header">
+                  <strong>Strict Priority (strict_starves.sched)</strong>
+                  <span class="badge-status-red">Batch Starves Forever</span>
+                </div>
+                <div id="compTimelineA" class="gantt-timeline-track comp-track"></div>
+                <div class="comp-metrics-row">
+                  <div>Batch Share: <strong id="compABatchShare" class="text-red">0.0%</strong></div>
+                  <div>Batch Wait: <strong id="compABatchWait" class="text-red">10,000+ ms</strong></div>
+                </div>
+              </div>
+
+              <!-- Aging Fix Outcome -->
+              <div class="comparison-card">
+                <div class="comp-header">
+                  <strong>Priority + Aging (aging_fix.sched)</strong>
+                  <span class="badge-status-green">Starvation Prevented</span>
+                </div>
+                <div id="compTimelineB" class="gantt-timeline-track comp-track"></div>
+                <div class="comp-metrics-row">
+                  <div>Batch Share: <strong id="compBBatchShare" class="text-green">35.4%</strong></div>
+                  <div>Batch Wait: <strong id="compBBatchWait" class="text-green">220 ms (&le; 380ms bound)</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 5: ADAPTIVE TUNING -->
+      <!-- ============================================================== -->
+      <section id="view-tuning" class="view-panel hidden">
+        <div class="section-container">
+          
+          <div class="section-header-bar">
+            <div>
+              <h2 class="section-heading">Adaptive Parameter Tuner</h2>
+              <p class="section-subheading">
+                Searches declared parameter ranges (e.g. batch.aging = 50ms..400ms), evaluates each candidate with Z3 and replay, and selects the optimal verified operating point.
+              </p>
+            </div>
+            <div class="section-actions">
+              <button id="tuneRunBtn" class="btn btn-primary btn-sm">Run Adaptive Search</button>
+            </div>
+          </div>
+
+          <!-- Tuner Configuration Bar -->
+          <div class="tuner-bar-card">
+            <div class="tuner-field">
+              <label class="field-label">Target Parameter:</label>
+              <select id="tuneParamSelect" class="select-field-sm">
+                <option value="batch.aging">batch.aging</option>
+                <option value="batch.quantum">batch.quantum</option>
+                <option value="web.quantum">web.quantum</option>
+              </select>
+            </div>
+            <div class="tuner-field">
+              <label class="field-label">Min Bound (ms):</label>
+              <input type="number" id="tuneMinInput" class="input-field-sm" value="50" min="1" max="2000">
+            </div>
+            <div class="tuner-field">
+              <label class="field-label">Max Bound (ms):</label>
+              <input type="number" id="tuneMaxInput" class="input-field-sm" value="400" min="1" max="5000">
+            </div>
+            <div class="tuner-field">
+              <label class="field-label">Evaluation Steps:</label>
+              <input type="number" id="tuneStepsInput" class="input-field-sm" value="6" min="3" max="12">
+            </div>
+          </div>
+
+          <!-- Tuner Recommendation Result -->
+          <div id="tuneResultBox" class="tuner-recommendation-card neutral">
+            <div class="tune-status-pill" id="tuneResultPill">Ready</div>
+            <div class="tune-result-text">
+              <h4 id="tuneResultTitle" class="tune-title">Tuner Idle</h4>
+              <p id="tuneResultDesc" class="tune-desc">Run the adaptive search to evaluate candidate parameter configurations against formal guarantees.</p>
+            </div>
+          </div>
+
+          <!-- Evaluated Candidates Table -->
+          <div class="subsection-block">
+            <h3 class="subsection-title">Evaluated Candidate Parameter Values</h3>
+            <div class="table-wrap">
+              <table class="data-table" id="tuneCandidatesTable">
+                <thead>
+                  <tr>
+                    <th>Candidate Value</th>
+                    <th>Z3 SMT Status</th>
+                    <th>Provable Wait Bound</th>
+                    <th>Min CPU Share</th>
+                    <th>Verifier Diagnostic / Rejection Reason</th>
+                  </tr>
+                </thead>
+                <tbody id="tuneCandidatesBody">
+                  <tr><td colspan="5" class="empty-cell">Click "Run Adaptive Search" to evaluate candidates.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 6: CODE EXPLORER -->
+      <!-- ============================================================== -->
+      <section id="view-code" class="view-panel hidden">
+        <div class="section-container">
+          
+          <div class="section-header-bar">
+            <div>
+              <h2 class="section-heading">Source Code & eBPF Backend Explorer</h2>
+              <p class="section-subheading">
+                Inspect real repository compiler source files and generated Linux sched_ext eBPF C code skeletons.
+              </p>
+            </div>
+            <div class="section-actions">
+              <div class="code-tab-toggle">
+                <button class="code-tab-btn active" data-codetab="codetab-source">Repository Source Files</button>
+                <button class="code-tab-btn" data-codetab="codetab-ebpf">Generated eBPF C (sched_ext)</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 1: Real Repository Source -->
+          <div id="codetab-source" class="code-tab-view active">
+            <div class="source-picker-bar">
+              <div class="file-select-group">
+                <label class="field-label">Select Repository File:</label>
+                <select id="sourceFileDropdown" class="select-field">
+                  <!-- Populated from /api/source_files -->
+                </select>
+              </div>
+              <div class="file-meta-info" id="sourceFileMeta">
+                <span id="sourceFileLines">&mdash; lines</span>
+              </div>
+            </div>
+
+            <div class="code-viewer-panel">
+              <pre><code id="sourceCodeDisplay" class="source-code-block">Loading repository file...</code></pre>
+            </div>
+          </div>
+
+          <!-- Tab 2: Generated eBPF C Backend -->
+          <div id="codetab-ebpf" class="code-tab-view hidden">
+            <!-- Disclosure Box -->
+            <div class="backend-disclosure-card">
+              <div class="disclosure-title">Backend Status: Partial eBPF C Skeleton (Phase 4 Objective)</div>
+              <p class="disclosure-desc">
+                The SchedLang compiler emits valid C syntax targeting the Linux <code>sched_ext</code> struct_ops framework. Priority tiers and fixed quanta are lowered to static tables. <strong>Aging dispatch promotion hooks</strong> require kernel timer integration and remain in-progress for Phase 4. Real-kernel loading has not been attempted and requires a Linux &ge; 6.12 VM.
+              </p>
+            </div>
+
+            <div class="c-viewer-bar">
+              <span class="c-viewer-title">Target: sched_ext struct_ops C Skeleton</span>
+              <button id="copyCSourceBtn" class="btn btn-secondary btn-sm">Copy C Code</button>
+            </div>
+
+            <div class="code-viewer-panel">
+              <pre><code id="ebpfCDisplay" class="source-code-block">// Compile a policy in the Policy Editor to view emitted eBPF C code...</code></pre>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Guided Demonstration Modal / Drawer (Quiet & accessible when requested) -->
+  <div id="demoModal" class="demo-modal hidden">
+    <div class="demo-modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">SchedLang 5-Minute Demonstration Walkthrough</h3>
+        <button id="closeDemoModalBtn" class="icon-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="demo-step-badge">Step <span id="demoStepIndex">1</span> of 10</div>
+        <h4 id="demoStepTitle" class="demo-step-heading">Enter Scheduling Objective</h4>
+        <p id="demoStepDesc" class="demo-step-instruction">
+          Start by describing a scheduling objective in natural language or loading a pre-configured research intent.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button id="demoPrevBtn" class="btn btn-secondary btn-sm">Previous</button>
+        <button id="demoNextBtn" class="btn btn-primary btn-sm">Next Step &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

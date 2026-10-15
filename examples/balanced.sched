@@ -1,0 +1,8 @@
+// Two classes in the same tier: no starvation is possible, shares follow quanta.
+policy balanced {
+  option max_tasks = 8;
+  class web   { prio 0; quantum 5 ms;  kind interactive; }
+  class batch { prio 0; quantum 20 ms; kind batch; }
+  guarantee no_starvation(batch, 400 ms);
+  guarantee min_share(web, 10 %);
+}

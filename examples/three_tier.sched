@@ -1,0 +1,10 @@
+// Three tiers; ml aging is too slow for the promised bound -> counterexample.
+policy three_tier {
+  option max_tasks = 8;
+  class rt    { prio 0; quantum 2 ms;  kind realtime; }
+  class web   { prio 1; quantum 5 ms;  aging 100 ms; kind interactive; }
+  class ml    { prio 2; quantum 50 ms; aging 500 ms; kind batch; }
+  guarantee no_starvation(ml, 800 ms);
+  guarantee no_starvation(web, 300 ms);
+  guarantee min_share(ml, 5 %);
+}

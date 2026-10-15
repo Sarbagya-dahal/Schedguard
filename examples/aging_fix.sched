@@ -1,0 +1,8 @@
+// Same tiers, but aging bounds batch's wait.
+policy aging_fix {
+  option max_tasks = 8;
+  class web   { prio 0; quantum 5 ms;  kind interactive; }
+  class batch { prio 1; quantum 20 ms; aging 200 ms; kind batch; }
+  guarantee no_starvation(batch, 400 ms);
+  guarantee no_starvation(web, 400 ms);
+}

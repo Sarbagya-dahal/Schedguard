@@ -1,0 +1,104 @@
+{
+  "run_id": "run_20261016_023059_5862d5",
+  "timestamp": "2026-10-16 02:30:59",
+  "policy_name": "aging_fix",
+  "source_code": "// Same tiers, but aging bounds batch's wait.\npolicy aging_fix {\n  option max_tasks = 8;\n  class web   { prio 0; quantum 5 ms;  kind interactive; }\n  class batch { prio 1; quantum 20 ms; aging 200 ms; kind batch; }\n  guarantee no_starvation(batch, 400 ms);\n  guarantee no_starvation(web, 400 ms);\n}\n",
+  "compile": {
+    "ok": true,
+    "stages": [
+      {
+        "name": "Lexical Analysis",
+        "status": "COMPLETED",
+        "duration_ms": 0.28,
+        "details": "Tokenized input into 60 lexemes (keywords, identifiers, literals, punctuation)."
+      },
+      {
+        "name": "Parsing & AST",
+        "status": "COMPLETED",
+        "duration_ms": 0.04,
+        "details": "Constructed PolicyAST for 'aging_fix' with 2 class declarations, 2 guarantees, and max_tasks=8."
+      },
+      {
+        "name": "Safety Pass",
+        "status": "COMPLETED",
+        "duration_ms": 0.01,
+        "details": "All static semantic checks passed: class uniqueness, quantum ranges, priority tiers, and guarantee syntax."
+      },
+      {
+        "name": "IR Lowering",
+        "status": "COMPLETED",
+        "duration_ms": 0.02,
+        "details": "Lowered AST into fixed-size IRPolicy 'aging_fix' (2 classes, 2 guarantees)."
+      }
+    ],
+    "ir": {
+      "classes": [
+        {
+          "name": "web",
+          "idx": 0,
+          "prio": 0,
+          "quantum_ms": 5,
+          "aging_ms": 0,
+          "kind": "interactive"
+        },
+        {
+          "name": "batch",
+          "idx": 1,
+          "prio": 1,
+          "quantum_ms": 20,
+          "aging_ms": 200,
+          "kind": "batch"
+        }
+      ]
+    }
+  },
+  "check": {
+    "verdicts": [
+      {
+        "guarantee": "no_starvation(batch, 400ms)",
+        "status": "VERIFIED",
+        "counterexample": null,
+        "replay": "",
+        "elapsed_ms": 7.41
+      },
+      {
+        "guarantee": "no_starvation(web, 400ms)",
+        "status": "VERIFIED",
+        "counterexample": null,
+        "replay": "",
+        "elapsed_ms": 2.07
+      }
+    ],
+    "all_verified": true,
+    "has_violation": false
+  },
+  "analyze": {
+    "facts": {}
+  },
+  "simulate": {
+    "horizon_ms": 5000,
+    "decisions": 874,
+    "idle_ms": 0,
+    "per_class": {
+      "web": {
+        "cpu_ms": 4160,
+        "share_pct": 83.2,
+        "max_wait_ms": 45,
+        "dispatches": 832
+      },
+      "batch": {
+        "cpu_ms": 840,
+        "share_pct": 16.8,
+        "max_wait_ms": 230,
+        "dispatches": 42
+      }
+    }
+  },
+  "codegen": {},
+  "tuner": {},
+  "model_scope": {
+    "workload_assumptions": "Single CPU; static CPU-bound tasks (always runnable, non-preemptive quanta); task count bounded by max_tasks per class.",
+    "verifier_type": "Custom SMT scheduler analyzer implemented via Z3 over linear integer arithmetic.",
+    "kernel_distinction": "This formal analyzer verifies scheduling-level properties (starvation, CPU share bounds) under our formal model. It is NOT the Linux in-kernel BPF verifier (which checks register safety/memory safety). Real-kernel sched_ext loading and execution have not been attempted and remain Phase 4 objectives."
+  }
+}

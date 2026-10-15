@@ -1,0 +1,24 @@
+[project]
+name = "schedguard"
+version = "0.1.0"
+description = "Guarantee-carrying scheduling policies: a DSL compiler + Z3 verifier + simulator, with AI-proposed guarantees."
+requires-python = ">=3.10"
+dependencies = ["z3-solver>=4.12"]
+
+[project.optional-dependencies]
+llm = ["anthropic>=0.40"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+schedguard = "schedguard.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

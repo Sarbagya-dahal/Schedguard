@@ -1,0 +1,4 @@
+{"tasks": [
+  {"class": "web",   "count": 4},
+  {"class": "batch", "count": 4}
+]}
