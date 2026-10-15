@@ -952,6 +952,29 @@ body {
   gap: 14px;
 }
 
+.inspector-run-state {
+  padding: 7px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-card-alt);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.inspector-run-state.stale { color: var(--status-amber); border-color: var(--status-amber-border); background: var(--status-amber-bg); }
+.ir-inspector-view { font-family: var(--font-sans); font-size: 11px; color: var(--text-secondary); }
+.ir-caption { margin-bottom: 8px; line-height: 1.4; }
+.ir-meta { margin-bottom: 8px; color: var(--text-primary); font-family: var(--font-mono); }
+.compact-table { font-size: 10px; }
+.ir-section { margin-top: 10px; }
+.ir-section ul { margin: 5px 0 0 16px; padding: 0; }
+.ir-raw { margin-top: 10px; }
+.ir-raw pre { max-height: 160px; overflow: auto; margin-top: 6px; }
+.diag-success, .diag-failure { padding: 9px; border-radius: var(--radius-xs); line-height: 1.5; font-family: var(--font-sans); }
+.diag-success { background: var(--status-green-bg); border: 1px solid var(--status-green-border); color: var(--status-green); }
+.diag-success span { color: var(--text-secondary); }
+.diag-failure { background: var(--status-red-bg); border: 1px solid var(--status-red-border); color: var(--status-red); margin-bottom: 7px; }
+
 .icon-close-btn {
   background: transparent;
   border: none;

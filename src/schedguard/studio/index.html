@@ -248,6 +248,7 @@
               </div>
 
               <div class="drawer-body">
+                <div id="inspectorRunState" class="inspector-run-state">No compilation run selected.</div>
                 <div class="form-group">
                   <label for="aiPromptTextarea" class="field-label">Natural Language Scheduling Objective:</label>
                   <textarea id="aiPromptTextarea" class="text-area-input" rows="4" placeholder="Describe requirement, e.g. Prioritize interactive web tasks, give batch tasks a longer time quantum, and prevent batch starvation with a maximum waiting-time requirement of 400 milliseconds.">Prioritize interactive web tasks, give batch tasks a longer time quantum, and prevent batch starvation with a maximum waiting-time requirement of 400 milliseconds.</textarea>
@@ -308,7 +309,7 @@
                   </div>
 
                   <div id="subtab-ir" class="subtab-content active">
-                    <pre><code id="inspectorIrCode">Compile a policy to inspect IR.</code></pre>
+                    <div id="inspectorIrView" class="ir-inspector-view">Compile a policy to inspect IR.</div>
                   </div>
                   <div id="subtab-ast" class="subtab-content hidden">
                     <pre><code id="inspectorAstCode">Compile a policy to inspect AST.</code></pre>
@@ -494,8 +495,8 @@
             <div class="comparison-banner">
               <div>
                 <h3 class="subsection-title">Comparative Analysis: Strict Priority vs. Aging Fix</h3>
-                <p class="card-caption">
-                  Direct differential test running both policies on the identical workload (4 Web + 4 Batch). Illustrates starvation prevention via aging.
+                <p id="comparisonCaption" class="card-caption">
+                  Direct differential test running both policies on the identical workload and time horizon.
                 </p>
               </div>
               <button id="simCompareBtn" class="btn btn-secondary btn-sm">Run Side-by-Side Comparison</button>
@@ -506,7 +507,7 @@
               <div class="comparison-card">
                 <div class="comp-header">
                   <strong>Strict Priority (strict_starves.sched)</strong>
-                  <span class="badge-status-red">Batch Starves Forever</span>
+                  <span id="compBadgeA" class="badge-status-red">Strict-priority result</span>
                 </div>
                 <div id="compTimelineA" class="gantt-timeline-track comp-track"></div>
                 <div class="comp-metrics-row">
@@ -520,7 +521,7 @@
               <div class="comparison-card">
                 <div class="comp-header">
                   <strong>Priority + Aging (aging_fix.sched)</strong>
-                  <span class="badge-status-green">Starvation Prevented</span>
+                  <span id="compBadgeB" class="badge-status-green">Aging-policy result</span>
                 </div>
                 <div id="compTimelineB" class="gantt-timeline-track comp-track"></div>
                 <div class="comp-metrics-row">

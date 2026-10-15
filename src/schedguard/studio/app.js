@@ -452,6 +452,16 @@ function renderStageTelemetry(stages, compilation) {
 }
 
 function renderInspectorDrawer(runRecord) {
+  const state = document.getElementById("inspectorRunState");
+  const current = document.getElementById("mainCodeEditor")?.value?.trim() || appState.currentSource || "";
+  const snapshot = runRecord.source_code || "";
+  const stale = Boolean(snapshot && current && snapshot !== current);
+  if (state) {
+    state.className = `inspector-run-state${stale ? " stale" : ""}`;
+    state.textContent = stale
+      ? "Stale result: the editor source changed after this compile. Recompile to inspect current AST and IR."
+      : `Run ${runRecord.run_id || "current"} · source snapshot ${snapshot ? "aligned" : "unavailable"}`;
+  }
   // 1. Stages List with durations and errors
   const list = document.getElementById("inspectorStagesList");
   if (list) {
@@ -478,32 +488,55 @@ function renderInspectorDrawer(runRecord) {
     });
   }
 
-  // 2. Normalized IR tab
-  const irCode = document.getElementById("inspectorIrCode");
-  if (irCode) {
-    irCode.textContent = runRecord.compile?.ir?.dump || "No IR generated.";
+  // 2. Normalized IR tab: show actual lowered fields, not an AST-shaped dump.
+  const irView = document.getElementById("inspectorIrView");
+  if (irView) {
+    const ir = runRecord.compile?.ir;
+    if (!ir) {
+      irView.innerHTML = '<div class="empty-state">No lowered IR was produced because compilation did not reach IR lowering.</div>';
+    } else {
+      const classes = (ir.classes || []).map(c => `<tr><td>${c.idx}</td><td>${escapeHtml(c.name)}</td><td>${c.prio}</td><td>${c.quantum_ms} ms</td><td>${c.aging_ms ?? 0} ms</td><td>${escapeHtml(c.kind || "-")}</td></tr>`).join("");
+      const guarantees = (ir.guarantees || []).map(g => `<li><code>${escapeHtml(g.pretty || g.kind)}</code> → ${escapeHtml(g.cls_name || "?")} = ${g.value}</li>`).join("") || "<li>None declared</li>";
+      const adaptations = (ir.adaptations || []).map(a => `<li><code>${escapeHtml(a.cls_name || "?")}.${escapeHtml(a.param)}</code> ∈ [${a.min_val}, ${a.max_val}]</li>`).join("") || "<li>None declared</li>";
+      irView.innerHTML = `<div class="ir-caption">Lowered fixed-size representation consumed by analysis and code generation.</div>
+        <div class="ir-meta"><strong>${escapeHtml(ir.name)}</strong> · max_tasks=${ir.max_tasks}</div>
+        <table class="data-table compact-table"><thead><tr><th>ID</th><th>Class</th><th>Priority</th><th>Quantum</th><th>Aging</th><th>Kind</th></tr></thead><tbody>${classes}</tbody></table>
+        <div class="ir-section"><strong>Guarantees</strong><ul>${guarantees}</ul></div>
+        <div class="ir-section"><strong>Adaptations</strong><ul>${adaptations}</ul></div>
+        <details class="ir-raw"><summary>Raw serialized IR</summary><pre>${escapeHtml(JSON.stringify(ir, null, 2))}</pre></details>`;
+    }
   }
 
   // 3. AST JSON tab
   const astCode = document.getElementById("inspectorAstCode");
   if (astCode) {
-    astCode.textContent = JSON.stringify(runRecord.compile?.ast || {}, null, 2);
+    astCode.textContent = runRecord.compile?.ast
+      ? JSON.stringify(runRecord.compile.ast, null, 2)
+      : "No AST was produced because parsing did not complete.";
   }
 
   // 4. Diagnostics tab
   const diagsList = document.getElementById("inspectorDiagsList");
   if (diagsList) {
     diagsList.innerHTML = "";
-    const diags = runRecord.compile?.diagnostics || [];
-    if (diags.length === 0) {
-      diagsList.innerHTML = '<div class="empty-state">No semantic or safety diagnostics issued.</div>';
+    const compile = runRecord.compile;
+    const diags = compile?.diagnostics || [];
+    if (!compile) {
+      diagsList.innerHTML = '<div class="empty-state">Diagnostics are not available yet. Compile the current policy to inspect compiler results.</div>';
+    } else if (compile.ok && diags.length === 0) {
+      const analysis = runRecord.check?.analysis_status === "COMPLETED"
+        ? "Guarantee analysis ran separately; its verdicts are shown in the Verification workspace."
+        : "Guarantee analysis has not run.";
+      diagsList.innerHTML = `<div class="diag-success"><strong>Compilation succeeded.</strong><br>No errors or warnings. Lexical analysis, parsing, semantic validation and IR lowering completed successfully.<br><span>${analysis}</span></div>`;
     } else {
+      if (!compile.ok) diagsList.innerHTML = '<div class="diag-failure"><strong>Compilation failed.</strong> The following compiler diagnostics prevented a valid lowered policy:</div>';
       diags.forEach(d => {
         const item = document.createElement("div");
-        item.className = "diag-item";
-        item.textContent = `[${d.code}] Line ${d.line || 0}: ${d.message}`;
+        item.className = `diag-item ${d.stage || "compiler"}`;
+        item.textContent = `[${d.code}] ${d.stage || "compiler"} · Line ${d.line || 0}${d.col ? `, Column ${d.col}` : ""}: ${d.message}`;
         diagsList.appendChild(item);
       });
+      if (!diags.length) diagsList.innerHTML += '<div class="empty-state">Compilation failed without structured diagnostics.</div>';
     }
   }
 }
@@ -808,6 +841,9 @@ function renderSimulatorView(runRecord) {
   const sim = runRecord.simulate || {};
   renderGanttChart(sim.timeline, "simGanttTimeline", {
     horizonMs: sim.horizon_ms,
+    configuredHorizonMs: sim.configured_horizon_ms,
+    overview: sim.overview,
+    traceTotalEvents: sim.trace_total_events,
     knownClasses: Object.keys(sim.per_class || {}),
     traceTruncated: sim.trace_truncated,
     traceLimit: sim.trace_limit,
@@ -823,13 +859,14 @@ function renderGanttChart(timeline, containerId, options = {}) {
   container.innerHTML = "";
 
   const events = timeline || [];
+  const overview = options.overview?.buckets || [];
   const classes = options.knownClasses || [...new Set(events.map(ev => ev.class_name))];
   if (events.length === 0 && classes.length === 0) {
     container.innerHTML = '<div class="empty-state">No dispatch events recorded in the available trace.</div>';
     return;
   }
 
-  const horizon = Math.max(1, options.horizonMs || Math.max(...events.map(ev => ev.end_ms || 0), 1));
+  const horizon = Math.max(1, options.configuredHorizonMs || options.horizonMs || options.overview?.end_ms || Math.max(...events.map(ev => ev.end_ms || 0), 1));
   const axis = document.createElement("div");
   axis.className = "timeline-axis";
   [0, 25, 50, 75, 100].forEach(percent => {
@@ -850,16 +887,36 @@ function renderGanttChart(timeline, containerId, options = {}) {
     const track = document.createElement("div");
     track.className = "timeline-lane-track";
     const classEvents = events.filter(ev => ev.class_name === className);
-    if (classEvents.length === 0) {
+    const classOverview = overview.length
+      ? overview.map(bucket => ({
+          start_ms: bucket.start_ms,
+          end_ms: bucket.end_ms,
+          cpu_ms: Number(bucket.cpu_ms?.[className] || 0),
+        }))
+      : [];
+    const hasOverviewService = classOverview.some(bucket => bucket.cpu_ms > 0);
+    if (!hasOverviewService && classEvents.length === 0) {
       const waiting = document.createElement("div");
       waiting.className = "timeline-waiting";
       const taskCount = options.taskCounts?.[className] || 0;
       waiting.textContent = options.traceTruncated
-        ? "No service in available trace (trace truncated)"
+        ? (taskCount > 0 ? "No service observed in bounded trace (overview confirms no CPU)" : "No runnable tasks")
         : (taskCount > 0 ? "No CPU service (waiting/starved)" : "No runnable tasks");
       track.appendChild(waiting);
     }
-    classEvents.forEach(ev => {
+    classOverview.forEach(bucket => {
+      if (!bucket.cpu_ms) return;
+      const block = document.createElement("div");
+      const clsName = (className || "default").toLowerCase();
+      block.className = `timeline-block ${clsName}`;
+      block.style.left = `${Math.max(0, bucket.start_ms / horizon * 100)}%`;
+      block.style.width = `${Math.max(0.15, (bucket.end_ms - bucket.start_ms) / horizon * 100)}%`;
+      block.style.opacity = `${Math.min(1, Math.max(.22, bucket.cpu_ms / Math.max(1, bucket.end_ms - bucket.start_ms)))} `;
+      block.title = `${className}: ${bucket.start_ms}-${bucket.end_ms}ms, ${bucket.cpu_ms}ms CPU in bucket`;
+      track.appendChild(block);
+    });
+    // Fallback for older records that do not have complete overview buckets.
+    if (!overview.length) classEvents.forEach(ev => {
       const block = document.createElement("div");
       const clsName = (ev.class_name || "default").toLowerCase();
       block.className = `timeline-block ${clsName} ${ev.boosted ? "boosted" : ""}`;
@@ -880,8 +937,8 @@ function renderGanttChart(timeline, containerId, options = {}) {
   });
   const disclosure = document.getElementById("simTimelineDisclosure");
   if (disclosure) disclosure.textContent = options.traceTruncated
-    ? `Overview covers the first ${options.traceLimit || events.length} dispatch events; the detail table exposes the same available trace window.`
-    : `Full simulation trace shown: ${events.length} dispatch events across ${horizon} ms.`;
+    ? `Overview aggregates the complete ${horizon} ms simulation. Detail inspection contains ${events.length} of ${options.traceTotalEvents || events.length} dispatches (${options.traceLimit || events.length}-event capture limit).`
+    : `Overview and detail trace cover the complete ${horizon} ms simulation (${events.length} dispatches).`;
 }
 
 function renderDispatchDetails(timeline, truncated) {
@@ -965,7 +1022,17 @@ async function runSimulation() {
       }),
     });
     const data = await res.json();
-    renderGanttChart(data.timeline, "simGanttTimeline");
+    renderGanttChart(data.timeline, "simGanttTimeline", {
+      horizonMs: data.horizon_ms,
+      configuredHorizonMs: data.configured_horizon_ms,
+      overview: data.overview,
+      traceTotalEvents: data.trace_total_events,
+      knownClasses: Object.keys(data.per_class || {}),
+      traceTruncated: data.trace_truncated,
+      traceLimit: data.trace_limit,
+      taskCounts: data.task_counts,
+    });
+    renderDispatchDetails(data.timeline, data.trace_truncated);
     renderSimMetricsTable(data.per_class, "simMetricsBody");
   } catch (err) {
     console.error("Simulation request error", err);
@@ -992,6 +1059,9 @@ async function runDifferentialComparison() {
     const data = await res.json();
     renderGanttChart(data.policy_a.timeline, "compTimelineA", {
       horizonMs: data.policy_a.horizon_ms || 10000,
+      configuredHorizonMs: data.policy_a.configured_horizon_ms,
+      overview: data.policy_a.overview,
+      traceTotalEvents: data.policy_a.trace_total_events,
       knownClasses: Object.keys(data.policy_a.per_class || {}),
       traceTruncated: data.policy_a.trace_truncated,
       traceLimit: data.policy_a.trace_limit,
@@ -999,6 +1069,9 @@ async function runDifferentialComparison() {
     });
     renderGanttChart(data.policy_b.timeline, "compTimelineB", {
       horizonMs: data.policy_b.horizon_ms || 10000,
+      configuredHorizonMs: data.policy_b.configured_horizon_ms,
+      overview: data.policy_b.overview,
+      traceTotalEvents: data.policy_b.trace_total_events,
       knownClasses: Object.keys(data.policy_b.per_class || {}),
       traceTruncated: data.policy_b.trace_truncated,
       traceLimit: data.policy_b.trace_limit,
@@ -1007,6 +1080,17 @@ async function runDifferentialComparison() {
 
     const aBatch = data.policy_a.per_class?.batch;
     const bBatch = data.policy_b.per_class?.batch;
+
+    const aNoService = aBatch && aBatch.cpu_ms === 0 && (data.policy_a.task_counts?.batch || 0) > 0;
+    const bHasService = bBatch && bBatch.cpu_ms > 0;
+    const caption = document.getElementById("comparisonCaption");
+    if (caption) caption.textContent = aNoService && bHasService
+      ? "With the same runnable workload, strict priority delivered no batch CPU service in this horizon; aging delivered measurable batch service."
+      : "The identical workload produced different observed CPU service; inspect the metrics and trace evidence before drawing a starvation conclusion.";
+    const badgeA = document.getElementById("compBadgeA");
+    const badgeB = document.getElementById("compBadgeB");
+    if (badgeA) badgeA.textContent = aNoService ? "Batch received no CPU" : "Observed batch service";
+    if (badgeB) badgeB.textContent = bHasService ? "Batch received CPU" : "No batch service observed";
 
     if (aBatch) {
       document.getElementById("compABatchShare").textContent = `${aBatch.share_pct}% (STARVED)`;
@@ -1030,7 +1114,8 @@ function renderComparisonSummary(policy, elementId) {
   const rows = Object.entries(policy.per_class || {}).map(([name, stats]) =>
     `${escapeHtml(name)}: ${stats.cpu_ms}ms CPU · ${stats.share_pct}% share · max wait ${stats.max_wait_ms}ms · ${stats.dispatches} dispatches`
   );
-  target.textContent = `Workload: 4 web + 4 batch · Horizon: ${policy.horizon_ms}ms — ${rows.join(" | ")}`;
+  const workload = (policy.workload || []).map(t => `${t.count} ${t.class}`).join(" + ") || "unspecified workload";
+  target.textContent = `Workload: ${workload} · Horizon: ${policy.configured_horizon_ms || policy.horizon_ms}ms — ${rows.join(" | ")}`;
 }
 
 // ============================================================================

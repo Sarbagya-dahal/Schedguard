@@ -134,10 +134,12 @@ def _ir_to_dict(ir: IRPolicy) -> dict[str, Any]:
 
 def _ast_to_dict(ast: PolicyAST) -> dict[str, Any]:
     return {
+        "node_type": "PolicyAST",
         "name": ast.name,
         "max_tasks": ast.max_tasks,
         "classes": [
             {
+                "node_type": "ClassDecl",
                 "name": c.name,
                 "line": c.line,
                 "prio": c.prio,
@@ -149,6 +151,7 @@ def _ast_to_dict(ast: PolicyAST) -> dict[str, Any]:
         ],
         "guarantees": [
             {
+                "node_type": "GuaranteeDecl",
                 "kind": g.kind,
                 "cls": g.cls,
                 "value": g.value,
@@ -158,6 +161,7 @@ def _ast_to_dict(ast: PolicyAST) -> dict[str, Any]:
         ],
         "adaptations": [
             {
+                "node_type": "AdaptDecl",
                 "cls": a.cls,
                 "param": a.param,
                 "min_val": a.min_val,
@@ -167,6 +171,12 @@ def _ast_to_dict(ast: PolicyAST) -> dict[str, Any]:
             for a in getattr(ast, "adaptations", [])
         ],
     }
+
+
+def _diagnostics_to_dict(res) -> list[dict[str, Any]]:
+    if res.syntax_error:
+        return [{"code": "SYNTAX", "message": res.syntax_error, "line": res.syntax_line, "col": res.syntax_col, "stage": "parsing"}]
+    return [{"code": d.code, "message": d.message, "line": d.line, "col": 0, "stage": "safety"} for d in res.diagnostics]
 
 
 def _parse_workload(raw: Optional[dict[str, Any]], ir: IRPolicy) -> Workload:
@@ -186,6 +196,48 @@ def _parse_workload(raw: Optional[dict[str, Any]], ir: IRPolicy) -> Workload:
     # Default workload: balanced 2 tasks per class
     counts = {c.name: 3 if c.prio == 0 else 2 for c in ir.classes}
     return Workload.from_counts(counts)
+
+
+def _sim_to_dict(sim_res, wl: Workload) -> dict[str, Any]:
+    """Serialize telemetry without implying that a bounded trace is complete."""
+    return {
+        "horizon_ms": sim_res.horizon_ms,  # retained: elapsed execution endpoint
+        "configured_horizon_ms": sim_res.configured_horizon_ms,
+        "end_ms": sim_res.end_ms,
+        "idle_ms": sim_res.idle_ms,
+        "decisions": sim_res.decisions,
+        "trace_events": len(sim_res.timeline),
+        "trace_total_events": sim_res.decisions,
+        "trace_truncated": sim_res.trace_truncated,
+        "trace_limit": sim_res.trace_limit,
+        "trace_window": {
+            "start_ms": sim_res.timeline[0]["start_ms"] if sim_res.timeline else None,
+            "end_ms": sim_res.timeline[-1]["end_ms"] if sim_res.timeline else None,
+            "events": len(sim_res.timeline),
+            "complete": not sim_res.trace_truncated,
+        },
+        "overview": {
+            "start_ms": 0,
+            "end_ms": sim_res.configured_horizon_ms,
+            "buckets": sim_res.overview_buckets,
+            "complete": True,
+        },
+        "task_counts": sim_res.task_counts,
+        "per_class": {
+            name: {
+                "cpu_ms": st.cpu_ms,
+                "max_wait_ms": st.max_wait_ms,
+                "dispatches": st.dispatches,
+                "share_pct": round(st.share_pct, 2),
+            }
+            for name, st in sim_res.per_class.items()
+        },
+        "timeline": sim_res.timeline,
+        "workload": [
+            {"class": t.cls, "count": t.count, "work_ms": t.work_ms, "arrival_ms": t.arrival_ms}
+            for t in wl.tasks
+        ],
+    }
 
 
 # ---------------------------------------------------------
@@ -213,7 +265,8 @@ def api_compile(req: SourceRequest):
             "error": res.syntax_error,
             "line": res.syntax_line,
             "col": res.syntax_col,
-            "diagnostics": [{"code": "SYNTAX", "message": res.syntax_error, "line": res.syntax_line}],
+            "diagnostics": _diagnostics_to_dict(res),
+            "diagnostic_status": "FAILED",
             "ir": None,
             "ast": None,
             "stages": stages,
@@ -222,13 +275,14 @@ def api_compile(req: SourceRequest):
             "summary": f"Syntax Error: {res.syntax_error}",
         }
 
-    diags = [{"code": d.code, "message": d.message, "line": d.line} for d in res.diagnostics]
+    diags = _diagnostics_to_dict(res)
 
     if not res.ok or res.ir is None:
         return {
             "ok": False,
             "stage": "safety_pass",
             "diagnostics": diags,
+            "diagnostic_status": "FAILED",
             "ir": None,
             "ast": _ast_to_dict(res.ast) if res.ast else None,
             "stages": stages,
@@ -241,6 +295,7 @@ def api_compile(req: SourceRequest):
         "ok": True,
         "stage": "complete",
         "diagnostics": [],
+        "diagnostic_status": "SUCCESS",
         "ir": _ir_to_dict(res.ir),
         "ast": _ast_to_dict(res.ast) if res.ast else None,
         "stages": stages,
@@ -269,7 +324,8 @@ def api_run(req: SourceRequest):
         "ok": cres.ok,
         "total_duration_ms": cres.total_duration_ms,
         "stages": stages,
-        "diagnostics": [{"code": d.code, "message": d.message, "line": d.line} for d in cres.diagnostics],
+        "diagnostics": _diagnostics_to_dict(cres),
+        "diagnostic_status": "FAILED" if not cres.ok else "SUCCESS",
         "ir": _ir_to_dict(cres.ir) if cres.ir else None,
         "ast": _ast_to_dict(cres.ast) if cres.ast else None,
         "tokens_count": cres.tokens_count,
@@ -310,25 +366,7 @@ def api_run(req: SourceRequest):
         # Simulation with trace
         wl = _parse_workload(None, cres.ir)
         sim_res = simulate(cres.ir, wl, horizon_ms=10000, record_trace=True, max_trace_events=800)
-        sim_data = {
-            "horizon_ms": sim_res.horizon_ms,
-            "idle_ms": sim_res.idle_ms,
-            "decisions": sim_res.decisions,
-            "trace_events": len(sim_res.timeline),
-            "trace_truncated": sim_res.trace_truncated,
-            "trace_limit": sim_res.trace_limit,
-            "task_counts": sim_res.task_counts,
-            "per_class": {
-                name: {
-                    "cpu_ms": st.cpu_ms,
-                    "max_wait_ms": st.max_wait_ms,
-                    "dispatches": st.dispatches,
-                    "share_pct": round(st.share_pct, 2),
-                }
-                for name, st in sim_res.per_class.items()
-            },
-            "timeline": sim_res.timeline,
-        }
+        sim_data = _sim_to_dict(sim_res, wl)
 
         # eBPF C codegen snapshot
         codegen_data = emit_ebpf_c(cres.ir).to_dict()
@@ -453,32 +491,10 @@ def api_simulate(req: SimulateRequest):
         max_trace_events=req.max_trace_events,
     )
 
-    per_class = {
-        name: {
-            "cpu_ms": st.cpu_ms,
-            "max_wait_ms": st.max_wait_ms,
-            "dispatches": st.dispatches,
-            "share_pct": round(st.share_pct, 2),
-        }
-        for name, st in sim_res.per_class.items()
-    }
-
     return {
         "ok": True,
         "policy_name": res.ir.name,
-        "horizon_ms": sim_res.horizon_ms,
-        "idle_ms": sim_res.idle_ms,
-        "decisions": sim_res.decisions,
-        "trace_events": len(sim_res.timeline),
-        "trace_truncated": sim_res.trace_truncated,
-        "trace_limit": sim_res.trace_limit,
-        "task_counts": sim_res.task_counts,
-        "per_class": per_class,
-        "timeline": sim_res.timeline,
-        "workload": [
-            {"class": t.cls, "count": t.count, "work_ms": t.work_ms, "arrival_ms": t.arrival_ms}
-            for t in wl.tasks
-        ],
+        **_sim_to_dict(sim_res, wl),
     }
 
 
@@ -498,29 +514,11 @@ def api_compare_sim(req: CompareSimRequest):
         "ok": True,
         "policy_a": {
             "name": r_a.ir.name,
-            "horizon_ms": sim_a.horizon_ms,
-            "trace_events": len(sim_a.timeline),
-            "trace_truncated": sim_a.trace_truncated,
-            "trace_limit": sim_a.trace_limit,
-            "task_counts": sim_a.task_counts,
-            "per_class": {
-                k: {"cpu_ms": v.cpu_ms, "max_wait_ms": v.max_wait_ms, "share_pct": round(v.share_pct, 2), "dispatches": v.dispatches}
-                for k, v in sim_a.per_class.items()
-            },
-            "timeline": sim_a.timeline[:400],
+            **_sim_to_dict(sim_a, wl),
         },
         "policy_b": {
             "name": r_b.ir.name,
-            "horizon_ms": sim_b.horizon_ms,
-            "trace_events": len(sim_b.timeline),
-            "trace_truncated": sim_b.trace_truncated,
-            "trace_limit": sim_b.trace_limit,
-            "task_counts": sim_b.task_counts,
-            "per_class": {
-                k: {"cpu_ms": v.cpu_ms, "max_wait_ms": v.max_wait_ms, "share_pct": round(v.share_pct, 2), "dispatches": v.dispatches}
-                for k, v in sim_b.per_class.items()
-            },
-            "timeline": sim_b.timeline[:400],
+            **_sim_to_dict(sim_b, wl),
         },
     }
 
