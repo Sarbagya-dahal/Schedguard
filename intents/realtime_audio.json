@@ -1,0 +1,8 @@
+{
+  "goal": "Ultra low latency audio processing buffer; frame deadline must never be missed under any load.",
+  "classes": {
+    "rt":  {"cpu_pct": 20, "runnable_avg": 1, "pattern": "realtime audio dsp frame callback with 5ms hard deadline"},
+    "web": {"cpu_pct": 30, "runnable_avg": 2, "pattern": "interactive user control interface and ui rendering"},
+    "ml":  {"cpu_pct": 50, "runnable_avg": 4, "pattern": "offline spectral analysis and waveform encoding"}
+  }
+}

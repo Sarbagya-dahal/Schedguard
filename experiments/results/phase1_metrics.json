@@ -1,11 +1,11 @@
 {
-  "loc_src_nonblank": 852,
-  "pytest_summary": "28 passed in 0.99s",
+  "loc_src_nonblank": 3051,
+  "pytest_summary": "53 passed in 2.79s",
   "corpus": [
     {
       "policy": "aging_fix",
-      "frontend_ms": 0.29,
-      "verify_ms": 10.6,
+      "frontend_ms": 0.31,
+      "verify_ms": 12.8,
       "verdicts": [
         "VERIFIED",
         "VERIFIED"
@@ -13,8 +13,8 @@
     },
     {
       "policy": "balanced",
-      "frontend_ms": 0.32,
-      "verify_ms": 8.3,
+      "frontend_ms": 0.39,
+      "verify_ms": 9.1,
       "verdicts": [
         "VERIFIED",
         "VIOLATED"
@@ -22,7 +22,7 @@
     },
     {
       "policy": "invalid_ranges",
-      "frontend_ms": 0.34,
+      "frontend_ms": 0.55,
       "outcome": "REJECTED by safety pass",
       "diagnostics": [
         "E006",
@@ -34,16 +34,16 @@
     },
     {
       "policy": "strict_starves",
-      "frontend_ms": 0.19,
-      "verify_ms": 9.8,
+      "frontend_ms": 0.36,
+      "verify_ms": 16.8,
       "verdicts": [
         "VIOLATED"
       ]
     },
     {
       "policy": "three_tier",
-      "frontend_ms": 0.68,
-      "verify_ms": 30.4,
+      "frontend_ms": 0.47,
+      "verify_ms": 41.3,
       "verdicts": [
         "UNKNOWN",
         "UNKNOWN",
@@ -54,23 +54,23 @@
   "scalability": [
     {
       "classes": 2,
-      "ms_per_guarantee_mean": 2.82,
-      "ms_per_guarantee_max": 2.93
+      "ms_per_guarantee_mean": 3.22,
+      "ms_per_guarantee_max": 3.73
     },
     {
       "classes": 4,
-      "ms_per_guarantee_mean": 3.19,
-      "ms_per_guarantee_max": 3.29
-    },
-    {
-      "classes": 8,
-      "ms_per_guarantee_mean": 3.79,
+      "ms_per_guarantee_mean": 3.61,
       "ms_per_guarantee_max": 3.98
     },
     {
+      "classes": 8,
+      "ms_per_guarantee_mean": 4.55,
+      "ms_per_guarantee_max": 5.0
+    },
+    {
       "classes": 16,
-      "ms_per_guarantee_mean": 5.31,
-      "ms_per_guarantee_max": 5.53
+      "ms_per_guarantee_mean": 6.03,
+      "ms_per_guarantee_max": 7.21
     }
   ],
   "soundness": {

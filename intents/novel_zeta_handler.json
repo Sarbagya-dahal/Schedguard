@@ -1,0 +1,7 @@
+{
+  "goal": "Novel zeta distributed consensus leader election and deltasync replication cluster.",
+  "classes": {
+    "zetahandler": {"cpu_pct": 40, "runnable_avg": 2, "pattern": "novel consensus heartbeat and quorum coordinator"},
+    "deltasync":   {"cpu_pct": 50, "runnable_avg": 3, "pattern": "peer state delta synchronization protocol"}
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "goal": "Run continuous ML training in background without causing starvation for urgent tasks.",
+  "classes": {
+    "rt":  {"cpu_pct": 10, "runnable_avg": 2, "pattern": "realtime telemetry collector and health pulse"},
+    "web": {"cpu_pct": 30, "runnable_avg": 4, "pattern": "interactive model inference requests"},
+    "ml":  {"cpu_pct": 60, "runnable_avg": 4, "pattern": "heavy batch gradient updates and backpropagation"}
+  }
+}

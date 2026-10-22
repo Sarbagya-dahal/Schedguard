@@ -1,0 +1,389 @@
+{
+  "timestamp": "2026-10-22T19:00:33Z",
+  "intents_count": 13,
+  "intents": [
+    "adversarial_injection",
+    "ci_cd",
+    "db_cache",
+    "game_server",
+    "high_contention",
+    "minimal_single",
+    "ml_training",
+    "novel_alphaproc",
+    "novel_zeta_handler",
+    "realtime_audio",
+    "three_tier_web",
+    "untagged_mystery",
+    "web_batch"
+  ],
+  "providers": {
+    "rules": {
+      "status": "COMPLETED",
+      "provider": "rules",
+      "elapsed_ms": 1148.0,
+      "metrics": {
+        "classes_covered": [
+          "batch",
+          "ml",
+          "rt",
+          "web"
+        ],
+        "classes_covered_count": 4,
+        "total_proposed": 56,
+        "total_rejected": 0,
+        "total_attempts": 56,
+        "schema_rejection_rate": 0.0,
+        "total_verdicts": 56,
+        "verified_count": 35,
+        "violated_count": 4,
+        "unknown_count": 17,
+        "verified_rate": 0.625,
+        "violated_rate": 0.0714,
+        "unknown_rate": 0.3036,
+        "frontier_distance_mean": 5.6028,
+        "frontier_distance_std": 5.2553,
+        "unbounded_proposals_count": 0
+      },
+      "per_intent": [
+        {
+          "intent": "adversarial_injection",
+          "policy": "examples/aging_fix.sched",
+          "proposed_count": 4,
+          "verdicts": [
+            "VERIFIED",
+            "UNKNOWN",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "ci_cd",
+          "policy": "examples/aging_fix.sched",
+          "proposed_count": 4,
+          "verdicts": [
+            "VERIFIED",
+            "UNKNOWN",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "db_cache",
+          "policy": "examples/aging_fix.sched",
+          "proposed_count": 4,
+          "verdicts": [
+            "VERIFIED",
+            "UNKNOWN",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "game_server",
+          "policy": "examples/aging_fix.sched",
+          "proposed_count": 4,
+          "verdicts": [
+            "VERIFIED",
+            "UNKNOWN",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "high_contention",
+          "policy": "examples/three_tier.sched",
+          "proposed_count": 5,
+          "verdicts": [
+            "UNKNOWN",
+            "UNKNOWN",
+            "VIOLATED",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "minimal_single",
+          "policy": "examples/aging_fix.sched",
+          "proposed_count": 4,
+          "verdicts": [
+            "VERIFIED",
+            "UNKNOWN",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "ml_training",
+          "policy": "examples/three_tier.sched",
+          "proposed_count": 5,
+          "verdicts": [
+            "UNKNOWN",
+            "UNKNOWN",
+            "VIOLATED",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "novel_alphaproc",
+          "policy": "examples/aging_fix.sched",
+          "proposed_count": 4,
+          "verdicts": [
+            "VERIFIED",
+            "UNKNOWN",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "novel_zeta_handler",
+          "policy": "examples/aging_fix.sched",
+          "proposed_count": 4,
+          "verdicts": [
+            "VERIFIED",
+            "UNKNOWN",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "realtime_audio",
+          "policy": "examples/three_tier.sched",
+          "proposed_count": 5,
+          "verdicts": [
+            "UNKNOWN",
+            "UNKNOWN",
+            "VIOLATED",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "three_tier_web",
+          "policy": "examples/three_tier.sched",
+          "proposed_count": 5,
+          "verdicts": [
+            "UNKNOWN",
+            "UNKNOWN",
+            "VIOLATED",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "untagged_mystery",
+          "policy": "examples/aging_fix.sched",
+          "proposed_count": 4,
+          "verdicts": [
+            "VERIFIED",
+            "UNKNOWN",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        },
+        {
+          "intent": "web_batch",
+          "policy": "examples/aging_fix.sched",
+          "proposed_count": 4,
+          "verdicts": [
+            "VERIFIED",
+            "UNKNOWN",
+            "VERIFIED",
+            "VERIFIED"
+          ]
+        }
+      ]
+    },
+    "stub": {
+      "status": "COMPLETED",
+      "provider": "stub",
+      "repeats": 1,
+      "elapsed_ms": 794.49,
+      "metrics": {
+        "classes_covered": [
+          "batch",
+          "ml",
+          "web"
+        ],
+        "classes_covered_count": 3,
+        "total_proposed": 12,
+        "total_rejected": 0,
+        "total_attempts": 12,
+        "schema_rejection_rate": 0.0,
+        "total_verdicts": 12,
+        "verified_count": 6,
+        "violated_count": 2,
+        "unknown_count": 4,
+        "verified_rate": 0.5,
+        "violated_rate": 0.1667,
+        "unknown_rate": 0.3333,
+        "frontier_distance_mean": 1.0998,
+        "frontier_distance_std": 0.0003,
+        "unbounded_proposals_count": 0
+      },
+      "per_repeat_metrics": [
+        {
+          "classes_covered": [
+            "batch",
+            "ml",
+            "web"
+          ],
+          "classes_covered_count": 3,
+          "total_proposed": 12,
+          "total_rejected": 0,
+          "total_attempts": 12,
+          "schema_rejection_rate": 0.0,
+          "total_verdicts": 12,
+          "verified_count": 6,
+          "violated_count": 2,
+          "unknown_count": 4,
+          "verified_rate": 0.5,
+          "violated_rate": 0.1667,
+          "unknown_rate": 0.3333,
+          "frontier_distance_mean": 1.0998,
+          "frontier_distance_std": 0.0003,
+          "unbounded_proposals_count": 0
+        }
+      ],
+      "runs": [
+        [
+          {
+            "intent": "adversarial_injection",
+            "policy": "examples/aging_fix.sched",
+            "proposed_count": 0,
+            "rejected_count": 0,
+            "verdicts": [],
+            "error": ""
+          },
+          {
+            "intent": "ci_cd",
+            "policy": "examples/aging_fix.sched",
+            "proposed_count": 2,
+            "rejected_count": 0,
+            "verdicts": [
+              "UNKNOWN",
+              "VERIFIED"
+            ],
+            "error": ""
+          },
+          {
+            "intent": "db_cache",
+            "policy": "examples/aging_fix.sched",
+            "proposed_count": 2,
+            "rejected_count": 0,
+            "verdicts": [
+              "UNKNOWN",
+              "VERIFIED"
+            ],
+            "error": ""
+          },
+          {
+            "intent": "game_server",
+            "policy": "examples/aging_fix.sched",
+            "proposed_count": 2,
+            "rejected_count": 0,
+            "verdicts": [
+              "UNKNOWN",
+              "VERIFIED"
+            ],
+            "error": ""
+          },
+          {
+            "intent": "high_contention",
+            "policy": "examples/three_tier.sched",
+            "proposed_count": 0,
+            "rejected_count": 0,
+            "verdicts": [],
+            "error": ""
+          },
+          {
+            "intent": "minimal_single",
+            "policy": "examples/aging_fix.sched",
+            "proposed_count": 0,
+            "rejected_count": 0,
+            "verdicts": [],
+            "error": ""
+          },
+          {
+            "intent": "ml_training",
+            "policy": "examples/three_tier.sched",
+            "proposed_count": 2,
+            "rejected_count": 0,
+            "verdicts": [
+              "VIOLATED",
+              "VERIFIED"
+            ],
+            "error": ""
+          },
+          {
+            "intent": "novel_alphaproc",
+            "policy": "examples/aging_fix.sched",
+            "proposed_count": 0,
+            "rejected_count": 0,
+            "verdicts": [],
+            "error": ""
+          },
+          {
+            "intent": "novel_zeta_handler",
+            "policy": "examples/aging_fix.sched",
+            "proposed_count": 0,
+            "rejected_count": 0,
+            "verdicts": [],
+            "error": ""
+          },
+          {
+            "intent": "realtime_audio",
+            "policy": "examples/three_tier.sched",
+            "proposed_count": 1,
+            "rejected_count": 0,
+            "verdicts": [
+              "VIOLATED"
+            ],
+            "error": ""
+          },
+          {
+            "intent": "three_tier_web",
+            "policy": "examples/three_tier.sched",
+            "proposed_count": 1,
+            "rejected_count": 0,
+            "verdicts": [
+              "VERIFIED"
+            ],
+            "error": ""
+          },
+          {
+            "intent": "untagged_mystery",
+            "policy": "examples/aging_fix.sched",
+            "proposed_count": 0,
+            "rejected_count": 0,
+            "verdicts": [],
+            "error": ""
+          },
+          {
+            "intent": "web_batch",
+            "policy": "examples/aging_fix.sched",
+            "proposed_count": 2,
+            "rejected_count": 0,
+            "verdicts": [
+              "UNKNOWN",
+              "VERIFIED"
+            ],
+            "error": ""
+          }
+        ]
+      ]
+    },
+    "openrouter": {
+      "status": "NOT_RUN",
+      "provider": "openrouter",
+      "reason": "Missing OPENROUTER_API_KEY in environment",
+      "metrics": {}
+    },
+    "anthropic": {
+      "status": "NOT_RUN",
+      "provider": "anthropic",
+      "reason": "Missing ANTHROPIC_API_KEY in environment",
+      "metrics": {}
+    }
+  }
+}

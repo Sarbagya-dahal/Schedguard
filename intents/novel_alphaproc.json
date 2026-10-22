@@ -1,0 +1,7 @@
+{
+  "goal": "Coordinate high-frequency market data pipelines with execution engine for novel alphaproc system.",
+  "classes": {
+    "alphaproc":  {"cpu_pct": 70, "runnable_avg": 4, "pattern": "novel execution engine with microsecond order routing"},
+    "betastream": {"cpu_pct": 30, "runnable_avg": 2, "pattern": "streaming orderbook feed aggregator"}
+  }
+}

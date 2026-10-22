@@ -1,0 +1,8 @@
+{
+  "goal": "Standard 3-tier microservice architecture: edge router, application web server, and asynchronous queue worker.",
+  "classes": {
+    "rt":  {"cpu_pct": 15, "runnable_avg": 2, "pattern": "edge ingress reverse proxy packet routing"},
+    "web": {"cpu_pct": 45, "runnable_avg": 4, "pattern": "rest api web application request handlers"},
+    "ml":  {"cpu_pct": 40, "runnable_avg": 4, "pattern": "background queue workers processing image uploads"}
+  }
+}

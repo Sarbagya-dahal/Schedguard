@@ -1,0 +1,6 @@
+{
+  "goal": "Single web frontend instance running standalone with no other active tiers.",
+  "classes": {
+    "web": {"cpu_pct": 95, "runnable_avg": 2, "pattern": "solo web server responding to public requests"}
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "goal": "Arbitrary workload with unknown internal patterns; system must maintain reasonable progress for both services.",
+  "classes": {
+    "web":   {"cpu_pct": 30, "runnable_avg": 2, "pattern": "opaque service alpha"},
+    "batch": {"cpu_pct": 50, "runnable_avg": 3, "pattern": "opaque service beta"}
+  }
+}

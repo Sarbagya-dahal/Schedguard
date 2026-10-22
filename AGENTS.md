@@ -42,10 +42,11 @@ schedguard/
 │   │   └── pipeline.py        propose -> validate -> verify; rules fallback on failure
 │   └── cli.py                 subcommands: ir | check | analyze | simulate | infer
 ├── examples/*.sched           balanced, strict_starves, aging_fix, three_tier, invalid_ranges
-├── workloads/*.json  intents/*.json
-├── tests/                     27 tests (frontend, verifier/simulator/soundness, inference)
+├── workloads/*.json  intents/*.json (13 diverse evaluation intents)
+├── tests/                     53 tests (frontend, verifier/simulator/soundness, inference, providers, eval harness)
 └── experiments/
     ├── soundness.py           bound-vs-simulator differential test
+    ├── eval_inference.py      Phase 1b rule-vs-LLM evaluation harness
     ├── run_metrics.py         regenerates results/phase1_metrics.json (all numbers in the report)
     └── results/phase1_metrics.json
 ```
@@ -68,19 +69,21 @@ Feature 1: `inference.pipeline.infer(ir, intent, provider)`: facts = `analyze(ir
 
 ## Commands
 ```
-export PYTHONPATH=src
+export PYTHONPATH=src:experiments
 python -m pytest -q
 python -m schedguard check|analyze|simulate|infer|ir ...
 python experiments/run_metrics.py
+python experiments/eval_inference.py
 ```
 
 ## Status
-- [x] Phase 1 core: DSL, parser, safety pass, IR, Z3 verifier, simulator, replay, CLI, 27 tests
+- [x] Phase 1 core: DSL, parser, safety pass, IR, Z3 verifier, simulator, replay, CLI, Studio, 34 initial tests
 - [x] Feature 1 skeleton: property library, schema gate, rule baseline, stub + Anthropic providers, pipeline
-- [ ] **Phase 1b (do next):** evaluation harness `experiments/eval_inference.py` comparing rule baseline vs
-      real LLM on >= 12 intents in `intents/` (include untagged/novel class names). Metrics: classes covered,
-      schema-reject rate, verified/violated/unknown rates, distance to provable frontier
-      (proposed bound / tightest bound). Needs ANTHROPIC_API_KEY. Run each intent 3x, report variance.
+- [x] **Phase 1b:** evaluation harness `experiments/eval_inference.py` comparing rule baseline vs
+      LLM on >= 12 intents in `intents/` (includes untagged/novel class names, prompt injection).
+      Metrics: classes covered, schema-reject rate, verified/violated/unknown rates, distance to provable frontier
+      (proposed bound / tightest bound). Supports OpenRouter and Anthropic with offline fallback.
+      53 tests total passing.
 - [ ] Phase 2 (Feature 2), Phase 3 (Feature 3), Phase 4 (Feature 4 + real sched_ext backend): see ROADMAP.md
 
 ## Good first prompts for an assistant

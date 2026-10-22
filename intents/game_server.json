@@ -1,0 +1,7 @@
+{
+  "goal": "Maintain 60 FPS tick loop for multiplayer game server while streaming map chunks and telemetry.",
+  "classes": {
+    "web":   {"cpu_pct": 60, "runnable_avg": 4, "pattern": "physics simulation and player input tick loop interactive latency-sensitive"},
+    "batch": {"cpu_pct": 40, "runnable_avg": 3, "pattern": "world chunk generation and telemetry batch persist"}
+  }
+}

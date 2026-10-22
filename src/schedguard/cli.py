@@ -107,7 +107,7 @@ def main(argv=None):
     s = sub.add_parser("simulate"); s.add_argument("policy"); s.add_argument("workload")
     s.add_argument("--horizon", type=int, default=60_000); s.set_defaults(f=cmd_simulate)
     s = sub.add_parser("infer"); s.add_argument("policy"); s.add_argument("intent")
-    s.add_argument("--provider", choices=["stub", "anthropic"], default="stub")
+    s.add_argument("--provider", choices=["stub", "anthropic", "openrouter"], default=None)
     s.add_argument("--json", action="store_true"); s.set_defaults(f=cmd_infer)
     s = sub.add_parser("studio")
     s.add_argument("--host", default="127.0.0.1")

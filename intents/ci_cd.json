@@ -1,0 +1,7 @@
+{
+  "goal": "Execute compiler and test runner pipeline steadily in background without disrupting interactive developer tools.",
+  "classes": {
+    "web":   {"cpu_pct": 35, "runnable_avg": 2, "pattern": "developer ui and language server diagnostics interactive"},
+    "batch": {"cpu_pct": 65, "runnable_avg": 5, "pattern": "long running compiler and unit test runners background batch jobs"}
+  }
+}

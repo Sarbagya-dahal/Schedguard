@@ -1,0 +1,7 @@
+{
+  "goal": "Ensure cache hits are delivered with low latency while database background compaction progresses steadily.",
+  "classes": {
+    "web": {"cpu_pct": 40, "runnable_avg": 3, "pattern": "bursty in-memory cache lookups with latency deadline"},
+    "batch": {"cpu_pct": 50, "runnable_avg": 2, "pattern": "background database index compaction and flush"}
+  }
+}
