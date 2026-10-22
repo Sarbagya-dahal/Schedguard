@@ -1,0 +1,172 @@
+{
+  "timestamp": "2026-10-22T19:14:20Z",
+  "seeds": [
+    11,
+    22,
+    33,
+    44,
+    55
+  ],
+  "pairs_count": 10,
+  "budget_per_pair": 20,
+  "attackers": {
+    "random": {
+      "status": "COMPLETED",
+      "seeds_count": 5,
+      "regressions_per_1000": {
+        "mean": 452.0,
+        "std": 42.95
+      },
+      "mean_sims_to_first": {
+        "mean": 3.06,
+        "std": 0.88
+      },
+      "mean_best_regression": {
+        "mean": 729.62,
+        "std": 107.44
+      },
+      "per_seed": [
+        {
+          "seed": 11,
+          "simulations": 200,
+          "regressions_found": 84,
+          "regressions_per_1000": 420.0,
+          "mean_sims_to_first": 3.5,
+          "mean_best_regression": 647.57
+        },
+        {
+          "seed": 22,
+          "simulations": 200,
+          "regressions_found": 87,
+          "regressions_per_1000": 435.0,
+          "mean_sims_to_first": 3.8,
+          "mean_best_regression": 711.7
+        },
+        {
+          "seed": 33,
+          "simulations": 200,
+          "regressions_found": 85,
+          "regressions_per_1000": 425.0,
+          "mean_sims_to_first": 2.89,
+          "mean_best_regression": 773.88
+        },
+        {
+          "seed": 44,
+          "simulations": 200,
+          "regressions_found": 91,
+          "regressions_per_1000": 455.0,
+          "mean_sims_to_first": 3.5,
+          "mean_best_regression": 624.03
+        },
+        {
+          "seed": 55,
+          "simulations": 200,
+          "regressions_found": 105,
+          "regressions_per_1000": 525.0,
+          "mean_sims_to_first": 1.6,
+          "mean_best_regression": 890.9
+        }
+      ]
+    },
+    "hillclimb": {
+      "status": "COMPLETED",
+      "seeds_count": 5,
+      "regressions_per_1000": {
+        "mean": 712.0,
+        "std": 77.99
+      },
+      "mean_sims_to_first": {
+        "mean": 2.62,
+        "std": 1.07
+      },
+      "mean_best_regression": {
+        "mean": 466.38,
+        "std": 62.81
+      },
+      "per_seed": [
+        {
+          "seed": 11,
+          "simulations": 200,
+          "regressions_found": 164,
+          "regressions_per_1000": 820.0,
+          "mean_sims_to_first": 3.5,
+          "mean_best_regression": 477.8
+        },
+        {
+          "seed": 22,
+          "simulations": 200,
+          "regressions_found": 135,
+          "regressions_per_1000": 675.0,
+          "mean_sims_to_first": 1.14,
+          "mean_best_regression": 503.35
+        },
+        {
+          "seed": 33,
+          "simulations": 200,
+          "regressions_found": 134,
+          "regressions_per_1000": 670.0,
+          "mean_sims_to_first": 3.5,
+          "mean_best_regression": 361.41
+        },
+        {
+          "seed": 44,
+          "simulations": 200,
+          "regressions_found": 126,
+          "regressions_per_1000": 630.0,
+          "mean_sims_to_first": 1.86,
+          "mean_best_regression": 523.52
+        },
+        {
+          "seed": 55,
+          "simulations": 200,
+          "regressions_found": 153,
+          "regressions_per_1000": 765.0,
+          "mean_sims_to_first": 3.11,
+          "mean_best_regression": 465.81
+        }
+      ]
+    },
+    "llm_stub": {
+      "status": "COMPLETED",
+      "repeats": 3,
+      "regressions_per_1000": {
+        "mean": 483.33,
+        "std": 34.03
+      },
+      "mean_best_regression": {
+        "mean": 719.25,
+        "std": 50.33
+      },
+      "per_repeat": [
+        {
+          "repeat": 1,
+          "simulations": 200,
+          "regressions_found": 102,
+          "regressions_per_1000": 510.0,
+          "rejections": 0,
+          "mean_best_regression": 775.96
+        },
+        {
+          "repeat": 2,
+          "simulations": 200,
+          "regressions_found": 99,
+          "regressions_per_1000": 495.0,
+          "rejections": 0,
+          "mean_best_regression": 701.9
+        },
+        {
+          "repeat": 3,
+          "simulations": 200,
+          "regressions_found": 89,
+          "regressions_per_1000": 445.0,
+          "rejections": 0,
+          "mean_best_regression": 679.89
+        }
+      ]
+    },
+    "openrouter": {
+      "status": "NOT_RUN",
+      "reason": "Missing OPENROUTER_API_KEY in environment"
+    }
+  }
+}

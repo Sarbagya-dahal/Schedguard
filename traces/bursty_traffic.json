@@ -1,0 +1,9 @@
+{
+  "name": "bursty_traffic",
+  "description": "Bursty traffic spike arriving at offset 50ms",
+  "tasks": [
+    {"class": "web", "count": 2, "burst_ms": 5, "sleep_ms": 10, "arrival_ms": 0},
+    {"class": "web", "count": 6, "burst_ms": 15, "sleep_ms": 5, "arrival_ms": 50},
+    {"class": "batch", "count": 2, "arrival_ms": 0}
+  ]
+}

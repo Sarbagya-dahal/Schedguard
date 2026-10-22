@@ -1,0 +1,8 @@
+{
+  "name": "batch_heavy",
+  "description": "Heavy batch workload with multiple long-running compute jobs",
+  "tasks": [
+    {"class": "web", "count": 2, "burst_ms": 5, "sleep_ms": 25, "arrival_ms": 0},
+    {"class": "batch", "count": 6, "arrival_ms": 0}
+  ]
+}

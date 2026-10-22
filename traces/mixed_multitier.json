@@ -1,0 +1,9 @@
+{
+  "name": "mixed_multitier",
+  "description": "Multi-tier dynamic trace with realtime pulses and background jobs",
+  "tasks": [
+    {"class": "rt", "count": 2, "burst_ms": 2, "sleep_ms": 10, "arrival_ms": 0},
+    {"class": "web", "count": 3, "burst_ms": 10, "sleep_ms": 15, "arrival_ms": 5},
+    {"class": "ml", "count": 3, "arrival_ms": 0}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "steady_web",
+  "description": "Steady interactive web load with periodic background jobs",
+  "tasks": [
+    {"class": "web", "count": 4, "burst_ms": 10, "sleep_ms": 20, "arrival_ms": 0},
+    {"class": "batch", "count": 2, "arrival_ms": 10}
+  ]
+}

@@ -91,6 +91,90 @@ def cmd_infer(a):
     print(f"{len(rep.verified)} verified / {len(rep.violated)} violated / {len(rep.verdicts)} proposed")
 
 
+def cmd_attack(a):
+    from .adversary.objectives import RegressionObjective
+    from .adversary.attackers import RandomAttacker, HillClimbAttacker, LLMAttacker
+    from .inference.providers import get_provider
+
+    inc = _load(a.incumbent)
+    cand = _load(a.candidate)
+
+    if a.attacker == "hillclimb":
+        atk = HillClimbAttacker()
+    elif a.attacker == "llm":
+        atk = LLMAttacker(provider=get_provider(a.provider))
+    else:
+        atk = RandomAttacker()
+
+    target_cls = a.target_class
+    if not target_cls:
+        for c in inc.classes:
+            if c.kind in ("interactive", "realtime"):
+                target_cls = c.name
+                break
+        if not target_cls and inc.classes:
+            target_cls = inc.classes[0].name
+
+    obj = RegressionObjective(target_class=target_cls, metric_name=a.metric, tolerance=a.tolerance)
+    res = atk.search(inc, cand, obj, budget=a.budget, horizon_ms=a.horizon)
+
+    if a.json:
+        print(json.dumps(res.to_dict(), indent=2))
+        return
+
+    print(f"Attacker: {res.attacker_name}  (simulations: {res.simulations_run}/{a.budget})")
+    print(f"Regressions found: {res.regressions_found}")
+    print(f"Best regression: {res.best_regression:.2f} (target: {target_cls}.{a.metric}, tolerance: {a.tolerance})")
+    if res.worst_workload:
+        print(f"Worst workload tasks: {res.worst_workload.to_dict()['tasks']}")
+
+
+def cmd_gate(a):
+    from .gate import evaluate_candidate
+    from .adversary.attackers import RandomAttacker, HillClimbAttacker, LLMAttacker
+    from .inference.providers import get_provider
+
+    inc = _load(a.incumbent)
+    cand = _load(a.candidate)
+
+    if a.attacker == "hillclimb":
+        atk = HillClimbAttacker()
+    elif a.attacker == "llm":
+        atk = LLMAttacker(provider=get_provider(a.provider))
+    else:
+        atk = RandomAttacker()
+
+    dec = evaluate_candidate(
+        incumbent=inc,
+        candidate=cand,
+        recorded_traces=a.traces_dir,
+        budget=a.budget,
+        tolerance=a.tolerance,
+        attacker=atk,
+        target_class=a.target_class,
+        metric_name=a.metric,
+        horizon_ms=a.horizon,
+    )
+
+    if a.json:
+        print(json.dumps(dec.to_dict(), indent=2))
+    else:
+        status_color = dec.decision
+        print(f"Gate Verdict: {status_color}")
+        if dec.reasons:
+            print("Reasons for rejection:")
+            for r in dec.reasons:
+                print(f"  - {r}")
+        else:
+            print("All static guarantees, recorded traces, and adversarial searches passed.")
+        print(f"Traces evaluated: {len(dec.recorded_trace_results)}")
+        if dec.worst_workload:
+            print(f"Worst workload: {dec.worst_workload['tasks']}")
+        print(f"Limitations note: {dec.limitations}")
+
+    raise SystemExit(0 if dec.decision == "ACCEPT" else 1)
+
+
 def cmd_studio(a):
     import uvicorn
     from .server import app
@@ -109,6 +193,34 @@ def main(argv=None):
     s = sub.add_parser("infer"); s.add_argument("policy"); s.add_argument("intent")
     s.add_argument("--provider", choices=["stub", "anthropic", "openrouter"], default=None)
     s.add_argument("--json", action="store_true"); s.set_defaults(f=cmd_infer)
+
+    s = sub.add_parser("attack")
+    s.add_argument("incumbent")
+    s.add_argument("candidate")
+    s.add_argument("--attacker", choices=["random", "hillclimb", "llm"], default="random")
+    s.add_argument("--budget", type=int, default=30)
+    s.add_argument("--metric", default="p99_dispatch_latency")
+    s.add_argument("--class", dest="target_class", default=None)
+    s.add_argument("--tolerance", type=float, default=5.0)
+    s.add_argument("--horizon", type=int, default=10_000)
+    s.add_argument("--provider", default=None)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(f=cmd_attack)
+
+    s = sub.add_parser("gate")
+    s.add_argument("incumbent")
+    s.add_argument("candidate")
+    s.add_argument("--traces-dir", default="traces")
+    s.add_argument("--attacker", choices=["random", "hillclimb", "llm"], default="random")
+    s.add_argument("--budget", type=int, default=30)
+    s.add_argument("--metric", default="p99_dispatch_latency")
+    s.add_argument("--class", dest="target_class", default=None)
+    s.add_argument("--tolerance", type=float, default=5.0)
+    s.add_argument("--horizon", type=int, default=10_000)
+    s.add_argument("--provider", default=None)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(f=cmd_gate)
+
     s = sub.add_parser("studio")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)

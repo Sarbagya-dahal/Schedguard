@@ -33,22 +33,29 @@ schedguard/
 │   │   ├── safety.py          range/uniqueness/reference checks (codes E001..E010)
 │   │   ├── model.py           closed-form wait bound, ONE definition with NUM and SMT backends
 │   │   └── properties.py      Z3 checker, counterexample replay, tightest bound, guaranteed min share
-│   ├── sim/                   simulator.py (discrete-event, 1 CPU), workload.py
+│   ├── sim/                   simulator.py (Simulator v2, bursts/sleeps, latency p50/p99), workload.py
 │   ├── inference/             Feature 1
 │   │   ├── schema.py          property library + STRICT validation of untrusted AI output
 │   │   ├── rules.py           rule-table baseline (keyed by `kind` hint)
 │   │   ├── prompts.py         system/user prompt builder
-│   │   ├── providers.py       StubProvider (offline, not an AI) + AnthropicProvider
+│   │   ├── providers.py       StubProvider (offline, not an AI) + AnthropicProvider + OpenRouterProvider
 │   │   └── pipeline.py        propose -> validate -> verify; rules fallback on failure
-│   └── cli.py                 subcommands: ir | check | analyze | simulate | infer
+│   ├── adversary/             Feature 2
+│   │   ├── space.py           bounded workload parameter space + strict spec validator
+│   │   ├── objectives.py      regression & scope-violation objectives
+│   │   └── attackers.py       RandomAttacker, HillClimbAttacker, LLMAttacker
+│   ├── gate.py                pre-deployment regression gate (static + traces + adversarial search)
+│   └── cli.py                 subcommands: ir | check | analyze | simulate | infer | attack | gate
 ├── examples/*.sched           balanced, strict_starves, aging_fix, three_tier, invalid_ranges
-├── workloads/*.json  intents/*.json (13 diverse evaluation intents)
-├── tests/                     53 tests (frontend, verifier/simulator/soundness, inference, providers, eval harness)
+├── workloads/*.json  intents/*.json (13 intents)  traces/*.json (4 recorded traces)
+├── tests/                     71 tests (frontend, verifier, simulator v2, space, attackers, gate, eval)
 └── experiments/
     ├── soundness.py           bound-vs-simulator differential test
     ├── eval_inference.py      Phase 1b rule-vs-LLM evaluation harness
+    ├── planted_regressions.py Phase 2 planted regression benchmark suite
+    ├── run_phase2_metrics.py  Phase 2 multi-seed metrics runner
     ├── run_metrics.py         regenerates results/phase1_metrics.json (all numbers in the report)
-    └── results/phase1_metrics.json
+    └── results/               phase1_metrics.json, eval_inference.json, planted_regressions.json, phase2_metrics.json
 ```
 
 ## Data flow
@@ -56,9 +63,11 @@ schedguard/
 -> `verify.properties.check_guarantee` (Z3; VERIFIED | VIOLATED | UNKNOWN) -> replay in `sim.simulate`.
 Feature 1: `inference.pipeline.infer(ir, intent, provider)`: facts = `analyze(ir)` -> prompt -> provider
 -> `schema.validate` -> `check_guarantee` per accepted proposal.
+Feature 2: `gate.evaluate_candidate(incumbent, candidate, traces, budget, tolerance, attacker)`:
+static checks -> recorded traces -> adversarial search -> ACCEPT | REJECT.
 
 ## Invariants (never break these)
-1. **AI output is untrusted.** Every provider response goes through `schema.validate`. No exceptions.
+1. **AI output is untrusted.** Every provider response goes through `schema.validate` (guarantees) or `validate_spec` (workloads). No exceptions.
 2. **Only the verifier accepts/rejects.** No code path may mark a guarantee verified because an AI said so.
 3. `model.py` is the single source of truth for the bound; the simulator must stay semantically identical
    to docs/MODEL.md. If you change one, change the other and rerun `experiments/soundness.py`.
@@ -71,9 +80,11 @@ Feature 1: `inference.pipeline.infer(ir, intent, provider)`: facts = `analyze(ir
 ```
 export PYTHONPATH=src:experiments
 python -m pytest -q
-python -m schedguard check|analyze|simulate|infer|ir ...
+python -m schedguard check|analyze|simulate|infer|attack|gate|ir ...
 python experiments/run_metrics.py
 python experiments/eval_inference.py
+python experiments/planted_regressions.py
+python experiments/run_phase2_metrics.py
 ```
 
 ## Status
@@ -84,7 +95,11 @@ python experiments/eval_inference.py
       Metrics: classes covered, schema-reject rate, verified/violated/unknown rates, distance to provable frontier
       (proposed bound / tightest bound). Supports OpenRouter and Anthropic with offline fallback.
       53 tests total passing.
-- [ ] Phase 2 (Feature 2), Phase 3 (Feature 3), Phase 4 (Feature 4 + real sched_ext backend): see ROADMAP.md
+- [x] **Phase 2 (Feature 2):** Simulator v2 (bursts/sleeps, event queue, dispatch latency percentiles),
+      bounded parameter space, regression & scope-violation objectives, Random / HillClimb / LLM attackers,
+      pre-deployment regression gate (`gate.py`), planted-regression benchmark suite (`planted_regressions.py`),
+      multi-seed metrics runner (`run_phase2_metrics.py`), CLI `attack` & `gate`. 71 tests passing.
+- [ ] Phase 3 (Feature 3), Phase 4 (Feature 4 + real sched_ext backend): see ROADMAP.md
 
 ## Good first prompts for an assistant
 - "Write experiments/eval_inference.py per the Phase 1b spec in AGENTS.md and add 12 diverse intents."
