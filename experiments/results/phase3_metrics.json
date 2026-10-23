@@ -1,0 +1,621 @@
+{
+  "config": {
+    "seed": 0,
+    "samples": 32,
+    "max_iterations": 5,
+    "provider": "stub",
+    "model": null
+  },
+  "conditions": {
+    "raw": {
+      "status": "EXECUTED",
+      "samples": 32,
+      "success_rate": 1.0,
+      "mean_iterations": 1.15625,
+      "cause_accuracy": 1.0,
+      "guarantee_preservation_rejections": 0,
+      "runs": [
+        {
+          "name": "broken_no_aging_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_06",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_06",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_01",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_02",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_03",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_04",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_05",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        }
+      ]
+    },
+    "template": {
+      "status": "EXECUTED",
+      "samples": 32,
+      "success_rate": 1.0,
+      "mean_iterations": 1.15625,
+      "cause_accuracy": 1.0,
+      "guarantee_preservation_rejections": 0,
+      "runs": [
+        {
+          "name": "broken_no_aging_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_06",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_06",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_01",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_02",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_03",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_04",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_05",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        }
+      ]
+    },
+    "heuristic": {
+      "status": "EXECUTED",
+      "samples": 32,
+      "success_rate": 1.0,
+      "mean_iterations": 1.15625,
+      "cause_accuracy": 1.0,
+      "guarantee_preservation_rejections": 0,
+      "runs": [
+        {
+          "name": "broken_no_aging_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_no_aging_06",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_slow_aging_06",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_overpromised_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_01",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_02",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_03",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_04",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_quantum_imbalance_05",
+          "success": true,
+          "iterations": 2,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_tier_contention_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_01",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_02",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_03",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_04",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        },
+        {
+          "name": "broken_share_infeasible_05",
+          "success": true,
+          "iterations": 1,
+          "cause_correct": true
+        }
+      ]
+    },
+    "ai_explained": {
+      "status": "NOT_RUN",
+      "reason": "No configured real LLM provider"
+    }
+  }
+}

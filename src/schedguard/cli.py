@@ -174,6 +174,45 @@ def cmd_gate(a):
 
     raise SystemExit(0 if dec.decision == "ACCEPT" else 1)
 
+def cmd_classify(a):
+    from .repair.classify import classify_violation
+    ir = _load(a.policy)
+    facts = analyze(ir)
+    rows = [classify_violation(ir, v, facts).to_dict()
+            for v in check_all(ir) if v.status == "VIOLATED"]
+    if a.json:
+        print(json.dumps(rows, indent=2))
+    else:
+        for row in rows:
+            print(f"{row['cause']}: {row['explanation']}")
+    raise SystemExit(0 if rows else 1)
+
+def cmd_repair(a):
+    from .repair.loop import repair_policy
+    try:
+        with open(a.policy, encoding="utf-8") as f:
+            source = f.read()
+    except OSError as e:
+        print(f"error: cannot read policy file '{a.policy}': {e}", file=sys.stderr); raise SystemExit(2)
+    result = repair_policy(source, feedback=a.feedback)
+    if a.json:
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print("VERIFIED" if result.success else "NOT_VERIFIED")
+        print(result.source)
+    raise SystemExit(0 if result.success else 1)
+
+def cmd_synth(a):
+    from .synth.agent import synthesize_policy
+    result = synthesize_policy(a.intent, provider_name=a.provider, repair=not a.no_repair)
+    if a.json:
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print("VERIFIED" if result.success else "NOT_VERIFIED")
+        if result.source:
+            print(result.source)
+    raise SystemExit(0 if result.success else 1)
+
 
 def cmd_studio(a):
     import uvicorn
@@ -193,6 +232,15 @@ def main(argv=None):
     s = sub.add_parser("infer"); s.add_argument("policy"); s.add_argument("intent")
     s.add_argument("--provider", choices=["stub", "anthropic", "openrouter"], default=None)
     s.add_argument("--json", action="store_true"); s.set_defaults(f=cmd_infer)
+
+    s = sub.add_parser("classify", help="classify formally refuted guarantees")
+    s.add_argument("policy"); s.add_argument("--json", action="store_true"); s.set_defaults(f=cmd_classify)
+    s = sub.add_parser("repair", help="repair a policy with deterministic bounded feedback")
+    s.add_argument("policy"); s.add_argument("--feedback", choices=["raw", "template", "ai", "heuristic"], default="template")
+    s.add_argument("--json", action="store_true"); s.set_defaults(f=cmd_repair)
+    s = sub.add_parser("synth", help="propose and verify a policy from an intent")
+    s.add_argument("intent"); s.add_argument("--provider", choices=["stub", "anthropic", "openrouter"], default=None)
+    s.add_argument("--no-repair", action="store_true"); s.add_argument("--json", action="store_true"); s.set_defaults(f=cmd_synth)
 
     s = sub.add_parser("attack")
     s.add_argument("incumbent")

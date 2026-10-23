@@ -3,7 +3,7 @@ name = "schedguard"
 version = "0.1.0"
 description = "Guarantee-carrying scheduling policies: a DSL compiler + Z3 verifier + simulator, with AI-proposed guarantees."
 requires-python = ">=3.10"
-dependencies = ["z3-solver>=4.12"]
+dependencies = ["z3-solver>=5.3.0"]
 
 [project.optional-dependencies]
 llm = ["anthropic>=0.40"]

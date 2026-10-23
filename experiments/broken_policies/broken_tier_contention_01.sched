@@ -1,0 +1,8 @@
+// Mutation: 3 competing tiers with tight bound
+policy broken_tier_contention_01 {
+  option max_tasks = 8;
+  class rt    { prio 0; quantum 5 ms;  kind realtime; }
+  class web   { prio 1; quantum 15 ms; aging 80 ms; kind interactive; }
+  class batch { prio 2; quantum 25 ms; aging 150 ms; kind batch; }
+  guarantee no_starvation(batch, 25 ms);
+}

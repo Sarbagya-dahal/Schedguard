@@ -1,0 +1,7 @@
+// Mutation: batch demands excessive share against higher prio web
+policy broken_share_infeasible_02 {
+  option max_tasks = 8;
+  class web   { prio 0; quantum 5 ms;  kind interactive; }
+  class batch { prio 1; quantum 20 ms; aging 100 ms; kind batch; }
+  guarantee min_share(batch, 78 %);
+}

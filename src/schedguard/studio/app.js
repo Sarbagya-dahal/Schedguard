@@ -121,10 +121,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDrawers();
   initDemonstrationModal();
   initCodeExplorer();
+  initPhase3Workbench();
 
   // Load examples & recent runs
   await loadExamples();
   await loadRecentRuns();
+  await loadPhase3Metrics();
 
   // Load default policy example into editor
   await loadExample("aging_fix");
@@ -220,11 +222,102 @@ function switchView(viewId) {
     loadRecentRuns();
   } else if (viewId === "view-code") {
     ensureSourceFilesLoaded();
+  } else if (viewId === "view-experiments") {
+    loadPhase3Metrics();
   }
 }
 
 // Make switchView globally accessible for inline onclick links
 window.switchView = switchView;
+
+// ============================================================================
+// Phase 3 workbench: real synthesis, classification/repair, and metrics APIs
+// ============================================================================
+function phase3Escape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+}
+
+function phase3Copy(text, button) {
+  if (!text || text.startsWith("No ")) return;
+  navigator.clipboard.writeText(text).then(() => { if (button) { const old = button.textContent; button.textContent = "Copied"; setTimeout(() => button.textContent = old, 900); } });
+}
+
+async function phase3ResponseJson(response) {
+  const text = await response.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; }
+  catch (_) { throw new Error(`Request failed (${response.status}); server returned a non-JSON response.`); }
+  if (!response.ok) throw new Error(data.detail || data.message || data.error || `Request failed (${response.status}).`);
+  return data;
+}
+
+function initPhase3Workbench() {
+  document.getElementById("synthesisRunBtn")?.addEventListener("click", runPhase3Synthesis);
+  document.getElementById("repairRunBtn")?.addEventListener("click", runPhase3Repair);
+  document.getElementById("refreshMetricsBtn")?.addEventListener("click", loadPhase3Metrics);
+  document.getElementById("synthesisCopyBtn")?.addEventListener("click", () => phase3Copy(document.getElementById("synthesisSource").textContent, document.getElementById("synthesisCopyBtn")));
+  document.getElementById("repairCopyBtn")?.addEventListener("click", () => phase3Copy(document.getElementById("repairSourceOutput").textContent, document.getElementById("repairCopyBtn")));
+  const editor = document.getElementById("mainCodeEditor");
+  const repair = document.getElementById("repairSource");
+  if (editor && repair) repair.value = editor.value;
+}
+
+async function runPhase3Synthesis() {
+  const prompt = document.getElementById("synthesisPrompt")?.value.trim();
+  const provider = document.getElementById("synthesisProvider")?.value || "stub";
+  const status = document.getElementById("synthesisStatus");
+  if (!prompt) { status.textContent = "Enter a scheduling intent first."; status.className = "phase3-status status-warning"; return; }
+  status.textContent = "Generating and verifying…"; status.className = "phase3-status status-running";
+  try {
+    const res = await fetch("/api/synthesize", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({prompt, provider, repair:true})});
+    const data = await res.json(); if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    const p = data.proposal || {};
+    document.getElementById("synthesisSource").textContent = data.source || "No source generated.";
+    const copy = document.getElementById("synthesisCopyBtn"); copy.disabled = !data.source;
+    const intent = p.intent || {};
+    const repair = data.repair;
+    document.getElementById("synthesisDetails").innerHTML = `<div class="status-row"><span>Provider</span><strong>${phase3Escape(p.mode_label || p.provider || "Not recorded")}</strong></div><div class="status-row"><span>Proposal</span><strong>${phase3Escape(p.proposal_status || p.status || "NOT_RUN")}</strong></div><div class="status-row"><span>Compilation</span><strong>${phase3Escape(p.compilation_status || "NOT_RUN")}</strong></div><div class="status-row"><span>Consistency</span><strong>${phase3Escape(p.consistency_status || "NOT_RUN")}</strong></div><div class="status-row"><span>Extracted guarantees</span><strong>${phase3Escape((p.extracted_guarantees || []).join(", ") || "None")}</strong></div><div class="status-row"><span>Repair</span><strong>${repair ? (repair.success ? "VERIFIED" : "NOT_VERIFIED") : "NOT_RUN"}</strong></div><p>${phase3Escape(p.rationale || "")}</p><details><summary>Intent assumptions and limitations</summary><pre>${phase3Escape(JSON.stringify({assumptions:intent.assumptions || [], unsupported:intent.unsupported || []}, null, 2))}</pre></details>`;
+    status.textContent = data.success ? "Verified policy reached." : (p.proposal_status === "UNSUPPORTED_INTENT" ? "Unsupported requirement; no policy claimed." : "No verified policy reached.");
+    status.className = `phase3-status ${data.success ? "status-success" : "status-warning"}`;
+  } catch (err) { status.textContent = `Synthesis failed: ${err.message}`; status.className = "phase3-status status-error"; }
+}
+
+async function runPhase3Repair() {
+  const source = document.getElementById("repairSource")?.value.trim();
+  const feedback = document.getElementById("repairFeedback")?.value || "heuristic";
+  const status = document.getElementById("repairStatus");
+  if (!source) { status.textContent = "Enter PolicyLang source first."; status.className = "phase3-status status-warning"; return; }
+  status.textContent = "Classifying and repairing…"; status.className = "phase3-status status-running";
+  try {
+    // Keep the two CPU-bound Z3 workflows ordered. The verifier serializes
+    // native Z3 calls as a safeguard, while this avoids needless contention.
+    const classificationResponse = await fetch("/api/classify", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({source})});
+    const classification = await phase3ResponseJson(classificationResponse);
+    const repairResponse = await fetch("/api/repair", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({source, feedback})});
+    const repair = await phase3ResponseJson(repairResponse);
+    document.getElementById("repairClassifications").innerHTML = `<div class="status-row"><span>Overall</span><strong>${phase3Escape(classification.status)}</strong></div>` + ((classification.verdicts || []).map(v => `<div class="verdict-row"><strong class="verdict-${String(v.status).toLowerCase()}">${phase3Escape(v.status)}</strong><span>${phase3Escape(v.guarantee)}</span><small>${phase3Escape(v.replay || "")}</small></div>`).join("")) + ((classification.classifications || []).map(c => `<div class="cause-box"><strong>${phase3Escape(c.cause)}</strong><p>${phase3Escape(c.explanation)}</p><small>${phase3Escape(JSON.stringify(c.evidence || {}))}</small></div>`).join(""));
+    document.getElementById("repairIterations").innerHTML = (repair.iterations || []).map(i => `<div class="verdict-row"><strong>${phase3Escape(i.status)}</strong><span>${phase3Escape(i.cause || "—")}</span><small>${phase3Escape(i.message || "")}</small></div>`).join("") || "No iterations recorded.";
+    document.getElementById("repairSourceOutput").textContent = repair.source || "No repaired source.";
+    document.getElementById("repairCopyBtn").disabled = !repair.source;
+    status.textContent = repair.success ? "Verified repair reached." : "Repair did not reach verified status.";
+    status.className = `phase3-status ${repair.success ? "status-success" : "status-warning"}`;
+  } catch (err) { status.textContent = `Repair failed: ${err.message}`; status.className = "phase3-status status-error"; }
+}
+
+async function loadPhase3Metrics() {
+  const status = document.getElementById("metricsStatus"); if (!status) return;
+  try {
+    const res = await fetch("/api/metrics"); const payload = await res.json();
+    if (!res.ok || !payload.ok || !payload.data) { status.textContent = payload.message || "No recorded experiment results."; status.className = "phase3-status status-warning"; return; }
+    const conditions = payload.data.conditions || {};
+    const summary = document.getElementById("metricsSummary");
+    const entries = Object.entries(conditions).filter(([,v]) => v && v.status === "EXECUTED");
+    const first = entries[0]?.[1];
+    summary.innerHTML = `<div class="metric-tile"><span>Policies</span><strong>${first?.samples ?? "Not recorded"}</strong></div><div class="metric-tile"><span>Provider</span><strong>${phase3Escape(payload.data.config?.provider || "Not recorded")}</strong></div><div class="metric-tile"><span>Success rate</span><strong>${first ? `${(first.success_rate*100).toFixed(2)}%` : "Not recorded"}</strong></div><div class="metric-tile"><span>Failure rate</span><strong>${first ? `${((1-first.success_rate)*100).toFixed(2)}%` : "Not recorded"}</strong></div>`;
+    document.getElementById("metricsBody").innerHTML = Object.entries(conditions).map(([name,v]) => { if (!v || v.status !== "EXECUTED") return `<tr><td>${phase3Escape(name)}</td><td>NOT_RUN</td><td colspan="5">${phase3Escape(v?.reason || "Not recorded")}</td></tr>`; const success=v.success_rate; return `<tr><td>${phase3Escape(name)}</td><td>${phase3Escape(v.status)}</td><td>${v.samples ?? "Not recorded"}</td><td>${(success*100).toFixed(2)}%</td><td>${((1-success)*100).toFixed(2)}%</td><td>${v.mean_iterations ?? "Not recorded"}</td><td>${v.cause_accuracy == null ? "Not recorded" : `${(v.cause_accuracy*100).toFixed(2)}%`}</td></tr>`; }).join("");
+    status.textContent = `Loaded recorded ${payload.phase} results.`; status.className = "phase3-status status-success";
+  } catch (err) { status.textContent = `Metrics unavailable: ${err.message}`; status.className = "phase3-status status-error"; }
+}
 
 // ============================================================================
 // 2. Editor & Compilation Telemetry
@@ -492,7 +585,9 @@ function renderInspectorDrawer(runRecord) {
   const irView = document.getElementById("inspectorIrView");
   if (irView) {
     const ir = runRecord.compile?.ir;
-    if (!ir) {
+    if (stale) {
+      irView.innerHTML = '<div class="empty-state">The editor source changed after this run. Recompile before inspecting normalized IR.</div>';
+    } else if (!ir) {
       irView.innerHTML = '<div class="empty-state">No lowered IR was produced because compilation did not reach IR lowering.</div>';
     } else {
       const classes = (ir.classes || []).map(c => `<tr><td>${c.idx}</td><td>${escapeHtml(c.name)}</td><td>${c.prio}</td><td>${c.quantum_ms} ms</td><td>${c.aging_ms ?? 0} ms</td><td>${escapeHtml(c.kind || "-")}</td></tr>`).join("");
@@ -507,8 +602,14 @@ function renderInspectorDrawer(runRecord) {
     }
   }
 
-  // 3. AST JSON tab
+  // 3. AST tab: render the parser's AST, never a reconstruction from IR.
+  const astTree = document.getElementById("inspectorAstTree");
   const astCode = document.getElementById("inspectorAstCode");
+  if (astTree) {
+    astTree.innerHTML = stale
+      ? '<div class="empty-state">The editor source changed after this run. Recompile before inspecting the AST.</div>'
+      : (runRecord.compile?.ast ? renderAstTree(runRecord.compile.ast) : '<div class="empty-state">No AST was produced because parsing did not complete.</div>');
+  }
   if (astCode) {
     astCode.textContent = runRecord.compile?.ast
       ? JSON.stringify(runRecord.compile.ast, null, 2)
@@ -521,13 +622,15 @@ function renderInspectorDrawer(runRecord) {
     diagsList.innerHTML = "";
     const compile = runRecord.compile;
     const diags = compile?.diagnostics || [];
-    if (!compile) {
+    if (stale) {
+      diagsList.innerHTML = '<div class="diag-warning"><strong>Compilation result is stale.</strong> Recompile the current source to obtain diagnostics for this editor snapshot.</div>';
+    } else if (!compile) {
       diagsList.innerHTML = '<div class="empty-state">Diagnostics are not available yet. Compile the current policy to inspect compiler results.</div>';
     } else if (compile.ok && diags.length === 0) {
       const analysis = runRecord.check?.analysis_status === "COMPLETED"
         ? "Guarantee analysis ran separately; its verdicts are shown in the Verification workspace."
         : "Guarantee analysis has not run.";
-      diagsList.innerHTML = `<div class="diag-success"><strong>Compilation succeeded.</strong><br>No errors or warnings. Lexical analysis, parsing, semantic validation and IR lowering completed successfully.<br><span>${analysis}</span></div>`;
+      diagsList.innerHTML = `<div class="diag-success"><strong>Compilation succeeded.</strong><br>Compilation succeeded. No compiler or semantic diagnostics were issued.<br><span>${analysis}</span></div>`;
     } else {
       if (!compile.ok) diagsList.innerHTML = '<div class="diag-failure"><strong>Compilation failed.</strong> The following compiler diagnostics prevented a valid lowered policy:</div>';
       diags.forEach(d => {
@@ -539,6 +642,17 @@ function renderInspectorDrawer(runRecord) {
       if (!diags.length) diagsList.innerHTML += '<div class="empty-state">Compilation failed without structured diagnostics.</div>';
     }
   }
+}
+
+function renderAstTree(value, label = "PolicyAST") {
+  if (value === null || value === undefined) return "";
+  if (typeof value !== "object") return `<span class="ast-value">${escapeHtml(String(value))}</span>`;
+  const children = Object.entries(value).map(([key, child]) => {
+    if (Array.isArray(child)) return `<details class="ast-node" open><summary>${escapeHtml(key)} <span class="ast-count">${child.length}</span></summary>${child.map((item, i) => `<div class="ast-array-item"><span class="ast-key">${i}</span>${renderAstTree(item, key)}</div>`).join("")}</details>`;
+    if (child && typeof child === "object") return `<details class="ast-node" open><summary>${escapeHtml(key)}</summary>${renderAstTree(child, key)}</details>`;
+    return `<div class="ast-attribute"><span class="ast-key">${escapeHtml(key)}</span><span>${renderAstTree(child, key)}</span></div>`;
+  }).join("");
+  return `<div class="ast-object"><div class="ast-label">${escapeHtml(label)}</div>${children}</div>`;
 }
 
 // Download PDF Report
@@ -877,68 +991,67 @@ function renderGanttChart(timeline, containerId, options = {}) {
     axis.appendChild(tick);
   });
   container.appendChild(axis);
+  const row = document.createElement("div");
+  row.className = "timeline-cpu-row";
+  const label = document.createElement("div");
+  label.className = "timeline-lane-label";
+  label.textContent = "CPU";
+  const track = document.createElement("div");
+  track.className = "timeline-lane-track timeline-cpu-track";
   const tooltip = document.getElementById("simTooltip");
-  classes.forEach(className => {
-    const lane = document.createElement("div");
-    lane.className = "timeline-lane";
-    const label = document.createElement("div");
-    label.className = "timeline-lane-label";
-    label.textContent = className;
-    const track = document.createElement("div");
-    track.className = "timeline-lane-track";
-    const classEvents = events.filter(ev => ev.class_name === className);
-    const classOverview = overview.length
-      ? overview.map(bucket => ({
-          start_ms: bucket.start_ms,
-          end_ms: bucket.end_ms,
-          cpu_ms: Number(bucket.cpu_ms?.[className] || 0),
-        }))
-      : [];
-    const hasOverviewService = classOverview.some(bucket => bucket.cpu_ms > 0);
-    if (!hasOverviewService && classEvents.length === 0) {
-      const waiting = document.createElement("div");
-      waiting.className = "timeline-waiting";
-      const taskCount = options.taskCounts?.[className] || 0;
-      waiting.textContent = options.traceTruncated
-        ? (taskCount > 0 ? "No service observed in bounded trace (overview confirms no CPU)" : "No runnable tasks")
-        : (taskCount > 0 ? "No CPU service (waiting/starved)" : "No runnable tasks");
-      track.appendChild(waiting);
-    }
-    classOverview.forEach(bucket => {
-      if (!bucket.cpu_ms) return;
-      const block = document.createElement("div");
-      const clsName = (className || "default").toLowerCase();
-      block.className = `timeline-block ${clsName}`;
-      block.style.left = `${Math.max(0, bucket.start_ms / horizon * 100)}%`;
-      block.style.width = `${Math.max(0.15, (bucket.end_ms - bucket.start_ms) / horizon * 100)}%`;
-      block.style.opacity = `${Math.min(1, Math.max(.22, bucket.cpu_ms / Math.max(1, bucket.end_ms - bucket.start_ms)))} `;
-      block.title = `${className}: ${bucket.start_ms}-${bucket.end_ms}ms, ${bucket.cpu_ms}ms CPU in bucket`;
-      track.appendChild(block);
+  const segments = [];
+  if (!options.traceTruncated && events.length) {
+    events.forEach(ev => {
+      const previous = segments[segments.length - 1];
+      if (previous && previous.class_name === ev.class_name && previous.end_ms === ev.start_ms) {
+        previous.end_ms = ev.end_ms;
+        previous.duration_ms += ev.duration_ms || 0;
+        previous.events.push(ev);
+      } else segments.push({ ...ev, events: [ev] });
     });
-    // Fallback for older records that do not have complete overview buckets.
-    if (!overview.length) classEvents.forEach(ev => {
-      const block = document.createElement("div");
-      const clsName = (ev.class_name || "default").toLowerCase();
-      block.className = `timeline-block ${clsName} ${ev.boosted ? "boosted" : ""}`;
-      block.style.left = `${Math.max(0, ev.start_ms / horizon * 100)}%`;
-      block.style.width = `${Math.max(0.25, (ev.duration_ms || 0) / horizon * 100)}%`;
-      if (tooltip) {
-        block.addEventListener("mouseenter", () => {
-          tooltip.classList.remove("hidden");
-          tooltip.innerHTML = `<strong>${escapeHtml(ev.class_name)}</strong> (Task #${ev.task_id})<br>Execution: ${ev.start_ms}ms &rarr; ${ev.end_ms}ms (${ev.duration_ms}ms)<br>Observed wait: <strong>${ev.wait_ms}ms</strong><br>Priority: ${ev.prio}${ev.boosted ? " <strong>(aged/boosted)</strong>" : ""}`;
-        });
-        block.addEventListener("mousemove", e => { tooltip.style.left = `${e.clientX + 14}px`; tooltip.style.top = `${e.clientY + 14}px`; });
-        block.addEventListener("mouseleave", () => tooltip.classList.add("hidden"));
+  } else {
+    // The overview buckets preserve full-horizon CPU totals but not dispatch order.
+    // Render them as explicitly aggregated segments rather than pretending they are exact events.
+    overview.forEach(bucket => {
+      const span = Math.max(0, bucket.end_ms - bucket.start_ms);
+      let cursor = bucket.start_ms;
+      Object.entries(bucket.cpu_ms || {}).forEach(([className, cpuMs]) => {
+        const duration = Number(cpuMs) || 0;
+        if (!duration) return;
+        segments.push({ class_name: className, start_ms: cursor, end_ms: cursor + duration, duration_ms: duration, aggregated: true, events: [] });
+        cursor += duration;
+      });
+      if (cursor < bucket.end_ms && span && !Object.values(bucket.cpu_ms || {}).some(Boolean)) {
+        segments.push({ class_name: "idle", start_ms: bucket.start_ms, end_ms: bucket.end_ms, duration_ms: span, aggregated: true, events: [] });
       }
-      track.appendChild(block);
     });
-    lane.append(label, track);
-    container.appendChild(lane);
+  }
+  segments.forEach(segment => {
+    const block = document.createElement("div");
+    const clsName = (segment.class_name || "default").toLowerCase();
+    block.className = `timeline-block ${clsName} ${segment.boosted ? "boosted" : ""}`;
+    block.style.left = `${Math.max(0, segment.start_ms / horizon * 100)}%`;
+    block.style.width = `${Math.max(0, (segment.end_ms - segment.start_ms) / horizon * 100)}%`;
+    block.setAttribute("aria-label", `${segment.class_name}, ${segment.start_ms} to ${segment.end_ms} milliseconds`);
+    const detail = segment.aggregated ? `${segment.class_name}: aggregated CPU service from ${segment.start_ms}ms to ${segment.end_ms}ms` : `${segment.class_name}: ${segment.start_ms}ms to ${segment.end_ms}ms (${segment.duration_ms}ms)${segment.events.length > 1 ? `, ${segment.events.length} dispatches` : ""}`;
+    block.title = detail;
+    if (tooltip && !segment.aggregated) {
+      block.addEventListener("mouseenter", () => {
+        const ev = segment.events[0];
+        tooltip.classList.remove("hidden");
+        tooltip.innerHTML = `<strong>${escapeHtml(segment.class_name)}</strong><br>Execution: ${segment.start_ms}ms &rarr; ${segment.end_ms}ms (${segment.duration_ms}ms)<br>${ev.task_id === undefined ? "" : `Task: #${ev.task_id}<br>`}Observed wait: ${ev.wait_ms ?? "not recorded"}ms${ev.prio === undefined ? "" : `<br>Priority: ${ev.prio}`}${ev.boosted ? "<br><strong>Aging promotion</strong>" : ""}`;
+      });
+      block.addEventListener("mousemove", e => { tooltip.style.left = `${e.clientX + 14}px`; tooltip.style.top = `${e.clientY + 14}px`; });
+      block.addEventListener("mouseleave", () => tooltip.classList.add("hidden"));
+    }
+    track.appendChild(block);
   });
+  row.append(label, track);
+  container.appendChild(row);
   const disclosure = document.getElementById("simTimelineDisclosure");
   if (disclosure) disclosure.textContent = options.traceTruncated
-    ? `Overview aggregates the complete ${horizon} ms simulation. Detail inspection contains ${events.length} of ${options.traceTotalEvents || events.length} dispatches (${options.traceLimit || events.length}-event capture limit).`
-    : `Overview and detail trace cover the complete ${horizon} ms simulation (${events.length} dispatches).`;
+    ? `CPU track covers the complete ${horizon} ms horizon. Colored intervals are time-bucket aggregates; detail inspection contains ${events.length} of ${options.traceTotalEvents || events.length} dispatches.`
+    : `CPU track covers the complete ${horizon} ms horizon (${events.length} dispatches, grouped only when consecutive).`;
 }
 
 function renderDispatchDetails(timeline, truncated) {
@@ -1321,7 +1434,7 @@ async function loadRecentRuns() {
     const runs = data.runs || [];
 
     if (runs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">No runs executed yet in this session. Open the Policy Editor to compile your first policy.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">No saved runs found.</td></tr>';
       return;
     }
 

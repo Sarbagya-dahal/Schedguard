@@ -1,0 +1,7 @@
+// Mutation: batch aging interval exceeds declared bound
+policy broken_slow_aging_06 {
+  option max_tasks = 8;
+  class web   { prio 0; quantum 5 ms;  kind interactive; }
+  class batch { prio 1; quantum 20 ms; aging 1100 ms; kind batch; }
+  guarantee no_starvation(batch, 270 ms);
+}

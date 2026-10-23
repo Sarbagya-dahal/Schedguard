@@ -1,0 +1,290 @@
+[
+  {
+    "filename": "broken_no_aging_01.sched",
+    "name": "broken_no_aging_01",
+    "ground_truth_cause": "NO_AGING",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 350 ms)",
+    "description": "Lower-priority batch class has no aging and starves under load.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_no_aging_02.sched",
+    "name": "broken_no_aging_02",
+    "ground_truth_cause": "NO_AGING",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 400 ms)",
+    "description": "Lower-priority batch class has no aging and starves under load.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_no_aging_03.sched",
+    "name": "broken_no_aging_03",
+    "ground_truth_cause": "NO_AGING",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 450 ms)",
+    "description": "Lower-priority batch class has no aging and starves under load.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_no_aging_04.sched",
+    "name": "broken_no_aging_04",
+    "ground_truth_cause": "NO_AGING",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 500 ms)",
+    "description": "Lower-priority batch class has no aging and starves under load.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_no_aging_05.sched",
+    "name": "broken_no_aging_05",
+    "ground_truth_cause": "NO_AGING",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 550 ms)",
+    "description": "Lower-priority batch class has no aging and starves under load.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_no_aging_06.sched",
+    "name": "broken_no_aging_06",
+    "ground_truth_cause": "NO_AGING",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 600 ms)",
+    "description": "Lower-priority batch class has no aging and starves under load.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_slow_aging_01.sched",
+    "name": "broken_slow_aging_01",
+    "ground_truth_cause": "AGING_TOO_SLOW",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 170 ms)",
+    "description": "Batch aging interval of 600ms exceeds declared bound of 170ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_slow_aging_02.sched",
+    "name": "broken_slow_aging_02",
+    "ground_truth_cause": "AGING_TOO_SLOW",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 190 ms)",
+    "description": "Batch aging interval of 700ms exceeds declared bound of 190ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_slow_aging_03.sched",
+    "name": "broken_slow_aging_03",
+    "ground_truth_cause": "AGING_TOO_SLOW",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 210 ms)",
+    "description": "Batch aging interval of 800ms exceeds declared bound of 210ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_slow_aging_04.sched",
+    "name": "broken_slow_aging_04",
+    "ground_truth_cause": "AGING_TOO_SLOW",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 230 ms)",
+    "description": "Batch aging interval of 900ms exceeds declared bound of 230ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_slow_aging_05.sched",
+    "name": "broken_slow_aging_05",
+    "ground_truth_cause": "AGING_TOO_SLOW",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 250 ms)",
+    "description": "Batch aging interval of 1000ms exceeds declared bound of 250ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_slow_aging_06.sched",
+    "name": "broken_slow_aging_06",
+    "ground_truth_cause": "AGING_TOO_SLOW",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 270 ms)",
+    "description": "Batch aging interval of 1100ms exceeds declared bound of 270ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_overpromised_01.sched",
+    "name": "broken_overpromised_01",
+    "ground_truth_cause": "OVERPROMISED_BOUND",
+    "target_class": "web",
+    "target_guarantee": "no_starvation(web, 3 ms)",
+    "description": "Web declared bound of 3ms is less than its quantum of 12ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_overpromised_02.sched",
+    "name": "broken_overpromised_02",
+    "ground_truth_cause": "OVERPROMISED_BOUND",
+    "target_class": "web",
+    "target_guarantee": "no_starvation(web, 4 ms)",
+    "description": "Web declared bound of 4ms is less than its quantum of 14ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_overpromised_03.sched",
+    "name": "broken_overpromised_03",
+    "ground_truth_cause": "OVERPROMISED_BOUND",
+    "target_class": "web",
+    "target_guarantee": "no_starvation(web, 5 ms)",
+    "description": "Web declared bound of 5ms is less than its quantum of 16ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_overpromised_04.sched",
+    "name": "broken_overpromised_04",
+    "ground_truth_cause": "OVERPROMISED_BOUND",
+    "target_class": "web",
+    "target_guarantee": "no_starvation(web, 6 ms)",
+    "description": "Web declared bound of 6ms is less than its quantum of 18ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_overpromised_05.sched",
+    "name": "broken_overpromised_05",
+    "ground_truth_cause": "OVERPROMISED_BOUND",
+    "target_class": "web",
+    "target_guarantee": "no_starvation(web, 7 ms)",
+    "description": "Web declared bound of 7ms is less than its quantum of 20ms.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_quantum_imbalance_01.sched",
+    "name": "broken_quantum_imbalance_01",
+    "ground_truth_cause": "QUANTUM_IMBALANCE",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 35 ms)",
+    "description": "Web tier quantum of 75ms introduces severe head-of-line blocking.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_quantum_imbalance_02.sched",
+    "name": "broken_quantum_imbalance_02",
+    "ground_truth_cause": "QUANTUM_IMBALANCE",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 40 ms)",
+    "description": "Web tier quantum of 90ms introduces severe head-of-line blocking.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_quantum_imbalance_03.sched",
+    "name": "broken_quantum_imbalance_03",
+    "ground_truth_cause": "QUANTUM_IMBALANCE",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 45 ms)",
+    "description": "Web tier quantum of 105ms introduces severe head-of-line blocking.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_quantum_imbalance_04.sched",
+    "name": "broken_quantum_imbalance_04",
+    "ground_truth_cause": "QUANTUM_IMBALANCE",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 50 ms)",
+    "description": "Web tier quantum of 120ms introduces severe head-of-line blocking.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_quantum_imbalance_05.sched",
+    "name": "broken_quantum_imbalance_05",
+    "ground_truth_cause": "QUANTUM_IMBALANCE",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 55 ms)",
+    "description": "Web tier quantum of 135ms introduces severe head-of-line blocking.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_tier_contention_01.sched",
+    "name": "broken_tier_contention_01",
+    "ground_truth_cause": "TIER_CONTENTION",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 25 ms)",
+    "description": "Multi-tier contention prevents batch from dispatching within tight bound.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_tier_contention_02.sched",
+    "name": "broken_tier_contention_02",
+    "ground_truth_cause": "TIER_CONTENTION",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 30 ms)",
+    "description": "Multi-tier contention prevents batch from dispatching within tight bound.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_tier_contention_03.sched",
+    "name": "broken_tier_contention_03",
+    "ground_truth_cause": "TIER_CONTENTION",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 35 ms)",
+    "description": "Multi-tier contention prevents batch from dispatching within tight bound.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_tier_contention_04.sched",
+    "name": "broken_tier_contention_04",
+    "ground_truth_cause": "TIER_CONTENTION",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 40 ms)",
+    "description": "Multi-tier contention prevents batch from dispatching within tight bound.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_tier_contention_05.sched",
+    "name": "broken_tier_contention_05",
+    "ground_truth_cause": "TIER_CONTENTION",
+    "target_class": "batch",
+    "target_guarantee": "no_starvation(batch, 45 ms)",
+    "description": "Multi-tier contention prevents batch from dispatching within tight bound.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_share_infeasible_01.sched",
+    "name": "broken_share_infeasible_01",
+    "ground_truth_cause": "SHARE_INFEASIBLE",
+    "target_class": "batch",
+    "target_guarantee": "min_share(batch, 74 %)",
+    "description": "Batch claims 74% CPU share, mathematically impossible against priority 0.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_share_infeasible_02.sched",
+    "name": "broken_share_infeasible_02",
+    "ground_truth_cause": "SHARE_INFEASIBLE",
+    "target_class": "batch",
+    "target_guarantee": "min_share(batch, 78 %)",
+    "description": "Batch claims 78% CPU share, mathematically impossible against priority 0.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_share_infeasible_03.sched",
+    "name": "broken_share_infeasible_03",
+    "ground_truth_cause": "SHARE_INFEASIBLE",
+    "target_class": "batch",
+    "target_guarantee": "min_share(batch, 82 %)",
+    "description": "Batch claims 82% CPU share, mathematically impossible against priority 0.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_share_infeasible_04.sched",
+    "name": "broken_share_infeasible_04",
+    "ground_truth_cause": "SHARE_INFEASIBLE",
+    "target_class": "batch",
+    "target_guarantee": "min_share(batch, 86 %)",
+    "description": "Batch claims 86% CPU share, mathematically impossible against priority 0.",
+    "violations_count": 1
+  },
+  {
+    "filename": "broken_share_infeasible_05.sched",
+    "name": "broken_share_infeasible_05",
+    "ground_truth_cause": "SHARE_INFEASIBLE",
+    "target_class": "batch",
+    "target_guarantee": "min_share(batch, 90 %)",
+    "description": "Batch claims 90% CPU share, mathematically impossible against priority 0.",
+    "violations_count": 1
+  }
+]

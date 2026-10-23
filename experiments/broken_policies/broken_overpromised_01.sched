@@ -1,0 +1,7 @@
+// Mutation: declared bound is smaller than own quantum
+policy broken_overpromised_01 {
+  option max_tasks = 8;
+  class web   { prio 0; quantum 12 ms;  kind interactive; }
+  class batch { prio 1; quantum 20 ms; aging 100 ms; kind batch; }
+  guarantee no_starvation(web, 3 ms);
+}

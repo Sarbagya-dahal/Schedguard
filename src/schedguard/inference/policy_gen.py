@@ -21,6 +21,7 @@ class SchedulingIntent:
     priority_values: dict[str, int] = field(default_factory=dict)
     wait_requirements: dict[str, int] = field(default_factory=dict)
     min_share_requirements: dict[str, int] = field(default_factory=dict)
+    requested_guarantees: list[str] = field(default_factory=list)
     tuning_requested: bool = False
     assumptions: list[str] = field(default_factory=list)
     unsupported: list[str] = field(default_factory=list)
@@ -29,7 +30,7 @@ class SchedulingIntent:
     @property
     def supported(self) -> bool:
         return bool(self.classes or self.priority_order or self.quantum_order or self.quantum_values or
-                    self.aging_values or self.wait_requirements or self.min_share_requirements) and not self.conflicts
+                    self.aging_values or self.wait_requirements or self.min_share_requirements) and not self.conflicts and not self.unsupported
 
     def to_dict(self) -> dict[str, Any]:
         return {"classes": self.classes, "priority_order": self.priority_order,
@@ -37,6 +38,7 @@ class SchedulingIntent:
                 "aging_values": self.aging_values, "priority_values": self.priority_values,
                 "wait_requirements": self.wait_requirements,
                 "min_share_requirements": self.min_share_requirements,
+                "requested_guarantees": self.requested_guarantees,
                 "tuning_requested": self.tuning_requested, "assumptions": self.assumptions,
                 "unsupported": self.unsupported, "conflicts": self.conflicts}
 
@@ -153,13 +155,39 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
         name = _class_in_phrase(match.group("phrase"))
         if name:
             intent.quantum_values[name] = int(match.group("value"))
+    # Natural-language forms used by the Studio: "set the web quantum to
+    # 6ms" and "batch quantum is 20ms".  Keep extraction class-scoped and
+    # numeric; do not infer values from class defaults here.
+    for match in re.finditer(
+        r"(?:set|give|make)\s+(?:the\s+)?(?P<target>[^.;,]+?)\s+quantum\s+(?:to|=|of)\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
+        lower,
+    ):
+        name = _class_in_phrase(match.group("target"))
+        if name:
+            intent.quantum_values[name] = int(match.group("value"))
+    for match in re.finditer(
+        r"(?:^|\band\s+)(?:set\s+)?(?:the\s+)?(?P<target>[^.;,]+?)\s+quantum\s+(?:to|=|of)\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
+        lower,
+    ):
+        name = _class_in_phrase(match.group("target"))
+        if name:
+            intent.quantum_values[name] = int(match.group("value"))
     for match in re.finditer(r"(?P<phrase>[^.;,]+?)\baging\s*(?:of|=|at|is|be)?\s*(?P<value>\d+)\s*(?:ms|milliseconds)", lower):
         name = _class_in_phrase(match.group("phrase"))
+        if name:
+            intent.aging_values[name] = int(match.group("value"))
+    for match in re.finditer(
+        r"(?:add|set|give)\s+aging\s+(?:of|=|to)\s*(?P<value>\d+)\s*(?:ms|milliseconds)\s+to\s+(?:the\s+)?(?P<target>[^.;,]+?)(?=\s+(?:class|and|require|with)\b|[.;,]|$)",
+        lower,
+    ):
+        name = _class_in_phrase(match.group("target"))
         if name:
             intent.aging_values[name] = int(match.group("value"))
 
     wait_patterns = [
         r"(?P<target>[^.;,]+?)\s+(?:do not|don't|must not|should not)\s+wait\s+(?:longer|more)\s+than\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
+        r"(?P<target>[^.;,]+?)\s+(?:maximum|max)\s+(?:waiting[- ]time|wait)\s+(?:is\s+)?(?:no\s+more\s+than|at\s+most|less\s+than|of|=)\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
+        r"(?:maximum|max)\s+(?:waiting[- ]time|wait)\s+for\s+(?P<target>[^.;,]+?)\s+(?:is\s+)?(?:no\s+more\s+than|at\s+most|less\s+than|of|=)\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
         r"(?:maximum|max)\s+(?:waiting[- ]time|wait)\s+(?:requirement|bound)?\s*(?:of|=)?\s*(?P<value>\d+)\s*(?:ms|milliseconds)(?:\s+for\s+(?P<target>[^.;,]+))?",
         r"(?:prevent|avoid|stop)\s+(?P<target>[^.;,]+?)\s+starvation[^\d]*(?P<value>\d+)\s*(?:ms|milliseconds)",
     ]
@@ -178,6 +206,13 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
         target = _class_in_phrase(match.group("target"))
         if target:
             intent.min_share_requirements[target] = int(match.group("value"))
+    if re.search(r"\bno[- ]starvation\b", lower):
+        intent.requested_guarantees.append("no_starvation")
+        if not intent.wait_requirements:
+            intent.unsupported.append(
+                "No-starvation was requested, but PolicyLang requires an explicit maximum wait bound "
+                "for a verifiable no_starvation guarantee."
+            )
     intent.tuning_requested = bool(re.search(r"\b(?:tune|tuning|optimi[sz]e|sweep|range)\b", lower))
 
     if not intent.classes and not (intent.priority_order or intent.quantum_order):
@@ -305,7 +340,8 @@ def _unsupported_result(intent: SchedulingIntent, provider: str = "offline_rules
         intent_status="CLARIFICATION_REQUIRED",
         rationale=("I couldn't identify a scheduling requirement in that request. Try describing workload priority, "
                    "time quanta, aging, maximum waiting time or another supported scheduling objective. " + detail),
-        intent=intent.to_dict(), extracted_classes=intent.classes)
+        intent=intent.to_dict(), extracted_classes=intent.classes,
+        extracted_guarantees=list(intent.requested_guarantees))
 
 
 def generate_by_rules(prompt_text: str) -> ProposedPolicyResult:

@@ -2,7 +2,7 @@
 Exposes compilation, formal guarantee analysis, simulation with timeline tracing,
 adaptive parameter tuning, eBPF C codegen, and source exploration.
 """
-import glob, json, os, pathlib
+import glob, json, logging, os, pathlib
 from typing import Any, Optional
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +20,9 @@ from .sim.workload import TaskSpec
 from .inference import infer
 from .inference.providers import get_provider
 from .inference.policy_gen import propose_policy
+from .synth.agent import synthesize_policy
+from .repair.classify import classify_violation
+from .repair.loop import repair_policy
 from .adapt import tune_policy
 from .codegen import emit_ebpf_c
 from .report import create_run_record, get_run, list_runs, generate_run_pdf, aggregate_verdicts
@@ -32,6 +35,7 @@ app = FastAPI(
     description="REST backend for AI-Driven eBPF Scheduling Compiler research studio",
     version="1.0.0",
 )
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,6 +44,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_api_error(request, exc):
+    """Keep browser responses JSON while retaining the real traceback in logs."""
+    logger.exception("Unhandled API error for %s %s", request.method, request.url.path)
+    return Response(
+        content=json.dumps({"ok": False, "error": "Internal server error", "message": "The operation failed; see server logs."}),
+        status_code=500,
+        media_type="application/json",
+    )
 
 
 # ---------------------------------------------------------
@@ -78,6 +93,21 @@ class InferRequest(BaseModel):
 class GenerateRequest(BaseModel):
     prompt: str
     provider: str = "rules"
+
+
+class SynthesisRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=12000)
+    provider: str = "stub"
+    repair: bool = True
+
+
+class RepairRequest(BaseModel):
+    source: str = Field(..., min_length=1, max_length=100000)
+    feedback: str = "template"
+
+
+class MetricsRequest(BaseModel):
+    include_runs: bool = True
 
 
 class AdaptRequest(BaseModel):
@@ -551,6 +581,50 @@ def api_generate(req: GenerateRequest):
     return res.to_dict()
 
 
+@app.post("/api/synthesize")
+def api_synthesize(req: SynthesisRequest):
+    """Run the real proposal -> validation -> bounded repair workflow."""
+    if req.provider not in {"stub", "rules", "anthropic", "openrouter"}:
+        raise HTTPException(status_code=400, detail="provider must be stub, rules, anthropic, or openrouter")
+    try:
+        result = synthesize_policy(req.prompt, provider_name=req.provider, repair=req.repair)
+        return result.to_dict()
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/classify")
+def api_classify(req: SourceRequest):
+    """Compile, verify, and classify only formally violated guarantees."""
+    try:
+        res = compile_source(req.source)
+    except DSLError as exc:
+        raise HTTPException(status_code=400, detail=f"Policy syntax error: {exc}") from exc
+    if not res.ok or res.ir is None:
+        raise HTTPException(status_code=400, detail="Policy failed compilation or safety validation")
+    verdicts = check_all(res.ir)
+    classifications = [classify_violation(res.ir, v).to_dict()
+                       for v in verdicts if v.status == "VIOLATED"]
+    return {"ok": True, "policy_name": res.ir.name,
+            "verdicts": [v.to_dict() for v in verdicts],
+            "classifications": classifications,
+            "status": "NOT_RUN" if not verdicts else ("VIOLATED" if classifications else
+                     ("UNKNOWN" if any(v.status == "UNKNOWN" for v in verdicts) else "VERIFIED"))}
+
+
+@app.post("/api/repair")
+def api_repair(req: RepairRequest):
+    """Run the bounded repair loop; final success is verifier-authoritative."""
+    if req.feedback not in {"raw", "template", "ai", "heuristic"}:
+        raise HTTPException(status_code=400, detail="unsupported feedback method")
+    try:
+        return repair_policy(req.source, feedback=req.feedback).to_dict()
+    except DSLError as exc:
+        raise HTTPException(status_code=400, detail=f"Policy syntax error: {exc}") from exc
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/adapt")
 def api_adapt(req: AdaptRequest):
     """Adaptive parameter tuner exploring parameter space and verifying candidates."""
@@ -668,12 +742,21 @@ def api_source_file(path: str = Query(..., description="Relative path within rep
 
 @app.get("/api/metrics")
 def api_metrics():
-    """Returns measured phase 1 experimental metrics."""
-    metrics_path = ROOT_DIR / "experiments" / "results" / "phase1_metrics.json"
-    if metrics_path.exists():
-        with open(metrics_path, encoding="utf-8") as f:
-            return json.load(f)
-    return {"error": "metrics file not yet generated"}
+    """Return actual experiment results, preferring the Phase 3 benchmark."""
+    paths = [
+        ("phase3", ROOT_DIR / "experiments" / "results" / "phase3_metrics.json"),
+        ("phase2", ROOT_DIR / "experiments" / "results" / "phase2_metrics.json"),
+        ("phase1", ROOT_DIR / "experiments" / "results" / "phase1_metrics.json"),
+    ]
+    for phase, metrics_path in paths:
+        if metrics_path.exists():
+            try:
+                with open(metrics_path, encoding="utf-8") as f:
+                    return {"ok": True, "phase": phase, "data": json.load(f)}
+            except (OSError, json.JSONDecodeError) as exc:
+                raise HTTPException(status_code=500, detail=f"Malformed {phase} metrics file") from exc
+    return {"ok": False, "phase": None, "data": None,
+            "message": "No experiment results are available. Run the documented metrics experiment."}
 
 
 @app.get("/api/progress")

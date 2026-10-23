@@ -37,6 +37,10 @@
           <span class="nav-label">Policy Editor</span>
         </button>
 
+        <button class="nav-item" data-view="view-synthesis"><span class="nav-icon nav-text-icon">✦</span><span class="nav-label">Policy Synthesis</span></button>
+        <button class="nav-item" data-view="view-repair"><span class="nav-icon nav-text-icon">⚕</span><span class="nav-label">Classify & Repair</span></button>
+        <button class="nav-item" data-view="view-experiments"><span class="nav-icon nav-text-icon">▦</span><span class="nav-label">Experiment Results</span></button>
+
         <button class="nav-item" data-view="view-verification">
           <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
           <span class="nav-label">Analysis & Verification</span>
@@ -79,67 +83,11 @@
       <section id="view-overview" class="view-panel active">
         <div class="overview-header">
           <div class="overview-title-block">
-            <h1 class="page-title">An AI-Driven DSL Compiler for Adaptive eBPF Scheduling</h1>
-            <p class="page-subtitle">
-              SchedLang ensures AI-synthesized scheduling policies are <em>safe by construction</em>. An operator or AI agent writes policies in PolicyLang. The compiler lowers them to fixed-size IR, enforcible bounds are verified via static safety passes, and a Z3-based SMT verifier proves starvation freedom and CPU share bounds over all static workloads before simulation or eBPF code generation.
-            </p>
+            <h1 class="page-title">SchedLang Research Studio</h1>
+            <p class="page-subtitle">Develop, analyze and compare scheduling policies with an AI-assisted DSL compiler.</p>
           </div>
           <div class="overview-cta">
             <button class="btn btn-primary btn-lg" onclick="switchView('view-editor')">Open Policy Editor &rarr;</button>
-          </div>
-        </div>
-
-        <div class="overview-grid">
-          <!-- Implementation Summary Card -->
-          <div class="overview-card">
-            <div class="card-header-clean">
-              <span class="card-eyebrow">Project Foundation</span>
-              <h2 class="card-title">Implementation Status</h2>
-            </div>
-            <div class="progress-indicator-block">
-              <div class="progress-bar-wrap">
-                <div class="progress-bar-fill" style="width: 25%;"></div>
-              </div>
-              <div class="progress-caption">
-                <strong>Approximately 25% complete</strong> &mdash; effort-weighted project estimate per ROADMAP.md.
-              </div>
-            </div>
-            <p class="card-body-text">
-              <strong>Phase 1 scope implemented:</strong> Lexer, LL(1) recursive-descent parser, static safety bounds pass (E001&ndash;E013), fixed-size IR, Z3 closed-form wait-bound verifier, discrete-event simulator with timeline tracing, offline rule baseline, and eBPF C skeleton emitter.
-            </p>
-            <div class="card-footer-actions">
-              <a href="#" onclick="switchView('view-code'); return false;" class="text-link">Inspect repository source code &rarr;</a>
-            </div>
-          </div>
-
-          <!-- Shortcuts & Tool Summary Card -->
-          <div class="overview-card">
-            <div class="card-header-clean">
-              <span class="card-eyebrow">Workbench Capabilities</span>
-              <h2 class="card-title">Research Workspaces</h2>
-            </div>
-            <ul class="shortcuts-list">
-              <li>
-                <a href="#" onclick="switchView('view-editor'); return false;">
-                  <strong>Policy Editor:</strong> Edit PolicyLang policies with syntax checks, compiler stage telemetry, and collapsible AI proposer.
-                </a>
-              </li>
-              <li>
-                <a href="#" onclick="switchView('view-verification'); return false;">
-                  <strong>Analysis & Verification:</strong> Inspect Z3 SMT proofs, worst-case wait bounds, counterexample workloads, and replay evidence.
-                </a>
-              </li>
-              <li>
-                <a href="#" onclick="switchView('view-simulator'); return false;">
-                  <strong>Workload Simulator:</strong> Gantt execution timeline showing queue states, aging promotions, and strict vs aging comparison.
-                </a>
-              </li>
-              <li>
-                <a href="#" onclick="switchView('view-tuning'); return false;">
-                  <strong>Adaptive Tuning:</strong> Sweep candidate parameter ranges, reject violating values, and select verified frontiers.
-                </a>
-              </li>
-            </ul>
           </div>
         </div>
 
@@ -167,11 +115,35 @@
                 </tr>
               </thead>
               <tbody id="recentRunsBody">
-                <tr><td colspan="7" class="empty-cell">No runs executed yet in this session. Open the Policy Editor to compile your first policy.</td></tr>
+                <tr><td colspan="7" class="empty-cell">No saved runs found.</td></tr>
               </tbody>
             </table>
           </div>
         </div>
+      </section>
+
+      <section id="view-synthesis" class="view-panel hidden">
+        <div class="section-container phase3-page">
+          <div class="section-header-bar"><div><h2 class="section-heading">Policy Synthesis</h2><p class="section-subheading">Proposal generation is untrusted; only formal verification can establish a guarantee.</p></div></div>
+          <div class="phase3-grid">
+            <div class="card phase3-form"><label for="synthesisPrompt">Scheduling intent</label><textarea id="synthesisPrompt" class="phase3-textarea" rows="8" placeholder="Prioritize interactive over batch and ensure batch tasks do not wait longer than 350 ms."></textarea><div class="phase3-controls"><label for="synthesisProvider">Provider</label><select id="synthesisProvider"><option value="stub">Offline rules (not an LLM)</option><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option></select><button id="synthesisRunBtn" class="btn btn-primary">Generate & evaluate</button></div><div id="synthesisStatus" class="phase3-status">Ready.</div></div>
+            <div class="card"><h3 class="card-title">Proposal details</h3><div id="synthesisDetails" class="phase3-output empty-cell">No synthesis run yet.</div></div>
+          </div>
+          <div class="card"><div class="phase3-output-header"><h3 class="card-title">PolicyLang source</h3><button id="synthesisCopyBtn" class="btn btn-sm btn-secondary" disabled>Copy source</button></div><pre id="synthesisSource" class="code-output">No source generated.</pre></div>
+        </div>
+      </section>
+
+      <section id="view-repair" class="view-panel hidden">
+        <div class="section-container phase3-page">
+          <div class="section-header-bar"><div><h2 class="section-heading">Classification & Repair</h2><p class="section-subheading">Compile, verify, classify violated guarantees, then run the bounded repair loop.</p></div></div>
+          <div class="card"><label for="repairSource">PolicyLang source</label><textarea id="repairSource" class="phase3-textarea code-input" rows="14"></textarea><div class="phase3-controls"><label for="repairFeedback">Feedback</label><select id="repairFeedback"><option value="heuristic">Deterministic heuristic</option><option value="template">Template</option><option value="raw">Raw counterexample</option></select><button id="repairRunBtn" class="btn btn-primary">Classify & repair</button></div><div id="repairStatus" class="phase3-status">Ready.</div></div>
+          <div class="phase3-grid"><div class="card"><h3 class="card-title">Verification and causes</h3><div id="repairClassifications" class="phase3-output empty-cell">No policy checked yet.</div></div><div class="card"><h3 class="card-title">Repair iterations</h3><div id="repairIterations" class="phase3-output empty-cell">No repair run yet.</div></div></div>
+          <div class="card"><div class="phase3-output-header"><h3 class="card-title">Final policy</h3><button id="repairCopyBtn" class="btn btn-sm btn-secondary" disabled>Copy source</button></div><pre id="repairSourceOutput" class="code-output">No repaired source.</pre></div>
+        </div>
+      </section>
+
+      <section id="view-experiments" class="view-panel hidden">
+        <div class="section-container phase3-page"><div class="section-header-bar"><div><h2 class="section-heading">Experiment Results</h2><p class="section-subheading">Recorded observations only. Missing or skipped conditions remain explicit.</p></div><button id="refreshMetricsBtn" class="btn btn-secondary">Refresh</button></div><div id="metricsStatus" class="phase3-status">Loading recorded results…</div><div id="metricsSummary" class="phase3-metrics-grid"></div><div class="card"><h3 class="card-title">Per-condition results</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>Condition</th><th>Status</th><th>Policies</th><th>Success</th><th>Failure</th><th>Mean iterations</th><th>Cause accuracy</th></tr></thead><tbody id="metricsBody"><tr><td colspan="7" class="empty-cell">No metrics loaded.</td></tr></tbody></table></div></div></div>
       </section>
 
       <!-- ============================================================== -->
@@ -304,7 +276,7 @@
                 <div class="inspector-section">
                   <div class="inspector-tab-bar">
                     <button class="subtab-btn active" data-subtab="subtab-ir">Normalized IR</button>
-                    <button class="subtab-btn" data-subtab="subtab-ast">AST (JSON)</button>
+                    <button class="subtab-btn" data-subtab="subtab-ast">AST</button>
                     <button class="subtab-btn" data-subtab="subtab-diags">Diagnostics</button>
                   </div>
 
@@ -312,7 +284,8 @@
                     <div id="inspectorIrView" class="ir-inspector-view">Compile a policy to inspect IR.</div>
                   </div>
                   <div id="subtab-ast" class="subtab-content hidden">
-                    <pre><code id="inspectorAstCode">Compile a policy to inspect AST.</code></pre>
+                    <div id="inspectorAstTree" class="ast-tree">Compile a policy to inspect AST.</div>
+                    <details class="ast-raw"><summary>Raw AST JSON</summary><pre><code id="inspectorAstCode">Compile a policy to inspect AST.</code></pre></details>
                   </div>
                   <div id="subtab-diags" class="subtab-content hidden">
                     <div id="inspectorDiagsList" class="diags-list">No diagnostics.</div>
@@ -453,7 +426,7 @@
 
             <div class="gantt-scroll-container">
               <div id="simGanttTimeline" class="gantt-timeline-track">
-                <!-- Compact class lanes and time axis rendered from real events. -->
+                <!-- One full-horizon CPU track rendered from the real simulator trace. -->
               </div>
             </div>
             <div id="simTimelineDisclosure" class="timeline-disclosure"></div>

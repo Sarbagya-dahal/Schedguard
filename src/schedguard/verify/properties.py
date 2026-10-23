@@ -3,12 +3,29 @@ guarantees of a policy over ALL workloads with 0..max_tasks tasks per class,
 using Z3 over linear integer arithmetic. Counterexamples are replayed in the
 simulator; a violation reported as CONFIRMED has been reproduced concretely."""
 import time
+import threading
+from functools import wraps
 from dataclasses import dataclass, field
 import z3
 from ..ir import IRPolicy, IRGuarantee
 from ..limits import INF
 from ..sim import simulate, Workload
 from .model import wait_bound, share_lower_bound_holds, SMT
+
+
+# The supported Z3 Python/runtime combinations are not reliably re-entrant
+# across concurrent Optimize/Solver calls sharing the process context. The
+# verifier is CPU-bound and bounded, so serialize solver operations rather
+# than allowing frontend requests to corrupt the native Z3 context.
+_Z3_LOCK = threading.RLock()
+
+
+def _serialized_z3(fn):
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        with _Z3_LOCK:
+            return fn(*args, **kwargs)
+    return wrapped
 
 
 @dataclass
@@ -39,6 +56,7 @@ def _replay_horizon(ir: IRPolicy, counts: dict[str, int]) -> int:
     return int(min(400_000, max(30_000, 6 * rnd + 6 * age)))
 
 
+@_serialized_z3
 def check_guarantee(ir: IRPolicy, g: IRGuarantee, replay: bool = True) -> Verdict:
     t0 = time.perf_counter()
     i = g.cls_idx
@@ -78,6 +96,7 @@ def check_guarantee(ir: IRPolicy, g: IRGuarantee, replay: bool = True) -> Verdic
     return v
 
 
+@_serialized_z3
 def tightest_wait_bound(ir: IRPolicy, i: int) -> int | None:
     """Largest provable worst-case wait over all workloads (None = unbounded)."""
     n, dom = _vars_and_domain(ir, i)
@@ -90,6 +109,7 @@ def tightest_wait_bound(ir: IRPolicy, i: int) -> int | None:
     return None if val >= INF else val
 
 
+@_serialized_z3
 def guaranteed_min_share(ir: IRPolicy, i: int) -> int:
     """Largest integer percent P such that min_share(class, P) is provable."""
     lo, hi = 0, 100

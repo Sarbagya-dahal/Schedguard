@@ -1,4 +1,4 @@
-z3-solver>=4.12
+z3-solver>=5.3.0
 pytest>=7
 # optional, only for the real LLM provider:
 # anthropic>=0.40

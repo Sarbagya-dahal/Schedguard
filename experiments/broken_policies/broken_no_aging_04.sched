@@ -1,0 +1,7 @@
+// Mutation: batch has no aging, top tier starves it
+policy broken_no_aging_04 {
+  option max_tasks = 8;
+  class web   { prio 0; quantum 9 ms;  kind interactive; }
+  class batch { prio 1; quantum 20 ms;  kind batch; }
+  guarantee no_starvation(batch, 500 ms);
+}
