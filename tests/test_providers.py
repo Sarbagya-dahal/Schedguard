@@ -20,6 +20,23 @@ def _openrouter_response_body(content="hello"):
 # --- OpenRouterProvider tests ---
 
 class TestOpenRouterProvider:
+    def test_http_failure_exposes_safe_category_status_and_retryability(self):
+        from schedguard.inference.providers import OpenRouterProvider, ProviderFailure
+        import urllib.error
+
+        err_body = MagicMock()
+        err_body.read.return_value = b'{"error": {"message": "upstream unavailable"}}'
+        err = urllib.error.HTTPError("url", 500, "Server Error", {}, err_body)
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-test", "SCHEDGUARD_MODEL": "test/model"}):
+            with patch("urllib.request.urlopen", side_effect=err), patch("time.sleep"):
+                with pytest.raises(ProviderFailure) as caught:
+                    OpenRouterProvider(max_retries=0).complete(_make_prompt())
+
+        assert caught.value.category == "upstream_http"
+        assert caught.value.upstream_status == 500
+        assert caught.value.retryable is True
+
     def test_successful_response(self):
         from schedguard.inference.providers import OpenRouterProvider
         body = _openrouter_response_body('{"guarantees":[], "rationale":"test"}')

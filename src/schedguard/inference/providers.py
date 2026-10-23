@@ -2,9 +2,37 @@ import json
 import os
 import time
 import hashlib
+import re
 import urllib.request
 import urllib.error
 from .prompts import Prompt
+
+
+def sanitize_provider_message(value: object, limit: int = 500) -> str:
+    """Return a bounded diagnostic that cannot reflect an authorization value."""
+    message = str(value or "").replace("\r", " ").replace("\n", " ")
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if key:
+        message = message.replace(key, "[redacted]")
+    message = re.sub(r"(?i)(bearer\s+)[^\s\"']+", r"\1[redacted]", message)
+    message = re.sub(r"(?i)sk-or-v1-[A-Za-z0-9._-]+", "[redacted]", message)
+    return message[:limit]
+
+
+class ProviderFailure(RuntimeError):
+    """Typed, safe provider failure for API translation and observability."""
+
+    def __init__(self, category: str, message: str, *, upstream_status: int | None = None,
+                 retryable: bool = False):
+        self.category = category
+        self.upstream_status = upstream_status
+        self.retryable = retryable
+        self.safe_message = sanitize_provider_message(message)
+        super().__init__(self.safe_message)
+
+
+class ProviderConfigurationError(ProviderFailure, ValueError):
+    """A selected provider cannot be initialized from the local configuration."""
 
 
 class StubProvider:
@@ -52,11 +80,11 @@ class OpenRouterProvider:
     def __init__(self, model: str | None = None, timeout: int = 30, max_retries: int = 3):
         api_key = os.environ.get("OPENROUTER_API_KEY")
         if not api_key:
-            raise ValueError("OPENROUTER_API_KEY environment variable is required")
+            raise ProviderConfigurationError("configuration", "OPENROUTER_API_KEY environment variable is required")
         self.api_key = api_key
         m = model or os.environ.get("SCHEDGUARD_MODEL")
         if not m:
-            raise ValueError("SCHEDGUARD_MODEL environment variable or model argument is required")
+            raise ProviderConfigurationError("configuration", "SCHEDGUARD_MODEL environment variable or model argument is required")
         self.model = m
         self.timeout = timeout
         self.max_retries = max_retries
@@ -85,14 +113,19 @@ class OpenRouterProvider:
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                     resp_data = resp.read()
-                    parsed = json.loads(resp_data.decode("utf-8"))
+                    try:
+                        parsed = json.loads(resp_data.decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                        raise ProviderFailure("malformed_response", "OpenRouter returned invalid JSON") from exc
                     if "choices" not in parsed or not parsed["choices"]:
-                        raise RuntimeError(f"Malformed response from OpenRouter: {parsed}")
+                        raise ProviderFailure("malformed_response", "OpenRouter response contained no choices")
                     choice = parsed["choices"][0]
                     content = choice.get("message", {}).get("content")
-                    if content is None:
-                        raise RuntimeError(f"Malformed response message: {choice}")
+                    if not isinstance(content, str) or not content.strip():
+                        raise ProviderFailure("malformed_response", "OpenRouter response contained no text content")
                     return content
+            except ProviderFailure:
+                raise
             except urllib.error.HTTPError as exc:
                 last_err = exc
                 body_bytes = b""
@@ -117,21 +150,23 @@ class OpenRouterProvider:
                     if attempt < self.max_retries:
                         time.sleep(1.0 * (2 ** attempt))
                         continue
-                    raise RuntimeError(f"OpenRouter HTTP {exc.code} after {self.max_retries} retries: {err_msg}") from exc
+                    raise ProviderFailure("upstream_http", f"OpenRouter HTTP {exc.code} after {self.max_retries} retries: {err_msg}",
+                                          upstream_status=exc.code, retryable=True) from exc
                 else:
-                    raise RuntimeError(f"OpenRouter HTTP {exc.code}: {err_msg}") from exc
+                    raise ProviderFailure("upstream_http", f"OpenRouter HTTP {exc.code}: {err_msg}",
+                                          upstream_status=exc.code, retryable=False) from exc
             except (TimeoutError, urllib.error.URLError) as exc:
                 last_err = exc
                 if attempt < self.max_retries:
                     time.sleep(1.0 * (2 ** attempt))
                     continue
-                raise RuntimeError(f"OpenRouter connection timed out/failed: {exc}") from exc
+                raise ProviderFailure("network", f"OpenRouter connection timed out/failed: {exc}", retryable=True) from exc
             except Exception as exc:
                 if isinstance(exc, (RuntimeError, KeyError, IndexError)):
                     raise
-                raise RuntimeError(f"OpenRouter request error: {exc}") from exc
+                raise ProviderFailure("request", f"OpenRouter request error: {exc}", retryable=False) from exc
 
-        raise RuntimeError(f"OpenRouter failed after retries: {last_err}")
+        raise ProviderFailure("network", f"OpenRouter failed after retries: {last_err}", retryable=True)
 
 
 class CachedProvider:

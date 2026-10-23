@@ -2,11 +2,11 @@
 Exposes compilation, formal guarantee analysis, simulation with timeline tracing,
 adaptive parameter tuning, eBPF C codegen, and source exploration.
 """
-import glob, json, logging, os, pathlib
+import glob, json, logging, os, pathlib, uuid
 from typing import Any, Optional
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -18,7 +18,7 @@ from .verify.properties import check_all, analyze
 from .sim import simulate, Workload
 from .sim.workload import TaskSpec
 from .inference import infer
-from .inference.providers import get_provider
+from .inference.providers import ProviderFailure, get_provider, sanitize_provider_message
 from .inference.policy_gen import propose_policy
 from .synth.agent import synthesize_policy
 from .repair.classify import classify_violation
@@ -56,6 +56,43 @@ async def unhandled_api_error(request, exc):
         content=json.dumps({"ok": False, "error": "Internal server error", "message": "The operation failed; see server logs."}),
         status_code=500,
         media_type="application/json",
+    )
+
+
+def provider_error_response(operation: str, provider: str, exc: ProviderFailure) -> JSONResponse:
+    """Translate provider failures without collapsing configuration and upstream causes into HTTP 500."""
+    correlation_id = uuid.uuid4().hex
+    logger.warning("Provider failure %s operation=%s provider=%s category=%s upstream_status=%s retryable=%s: %s",
+                   correlation_id, operation, provider, exc.category, exc.upstream_status, exc.retryable,
+                   sanitize_provider_message(exc))
+    if exc.category == "configuration":
+        status_code = 400
+    elif exc.retryable:
+        status_code = 503
+    else:
+        status_code = 502
+    return JSONResponse(status_code=status_code, content={
+        "ok": False,
+        "error": {
+            "operation": operation,
+            "provider": provider,
+            "category": exc.category,
+            "upstream_status": exc.upstream_status,
+            "retryable": exc.retryable,
+            "message": sanitize_provider_message(exc),
+            "correlation_id": correlation_id,
+        },
+    })
+
+
+def proposal_provider_failure(proposal: dict[str, Any]) -> ProviderFailure:
+    """Translate an already-sanitized proposal result to the shared HTTP contract."""
+    details = proposal.get("provider_error_details") or {}
+    return ProviderFailure(
+        str(details.get("category") or "request"),
+        str(proposal.get("provider_error") or "Provider request failed"),
+        upstream_status=details.get("upstream_status"),
+        retryable=bool(details.get("retryable")),
     )
 
 
@@ -578,7 +615,10 @@ def api_infer(req: InferRequest):
         else:
             intent = {"goal": "Ensure interactive responsiveness and prevent batch starvation"}
 
-    provider = get_provider(req.provider)
+    try:
+        provider = get_provider(req.provider)
+    except ProviderFailure as exc:
+        return provider_error_response("infer_guarantees", req.provider, exc)
     rep = infer(res.ir, intent, provider)
     return rep.to_dict()
 
@@ -587,6 +627,8 @@ def api_infer(req: InferRequest):
 def api_generate(req: GenerateRequest):
     """Translates plain-English scheduling intent into candidate SchedLang DSL policy."""
     res = propose_policy(req.prompt, provider_name=req.provider)
+    if res.status == "PROVIDER_ERROR":
+        return provider_error_response("generate_policy", req.provider, proposal_provider_failure(res.to_dict()))
     return res.to_dict()
 
 
@@ -597,7 +639,11 @@ def api_synthesize(req: SynthesisRequest):
         raise HTTPException(status_code=400, detail="provider must be stub, rules, anthropic, or openrouter")
     try:
         result = synthesize_policy(req.prompt, provider_name=req.provider, repair=req.repair)
-        return result.to_dict()
+        payload = result.to_dict()
+        if payload["proposal"].get("status") == "PROVIDER_ERROR":
+            return provider_error_response("synthesize_policy", req.provider,
+                                           proposal_provider_failure(payload["proposal"]))
+        return payload
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from .providers import OpenRouterProvider
+from .providers import OpenRouterProvider, ProviderFailure, sanitize_provider_message
 from .prompts import Prompt
 
 CLASS_ALIASES = {
@@ -67,6 +67,7 @@ class ProposedPolicyResult:
     consistency_errors: list[str] = field(default_factory=list)
     guarantee_status: str = "NOT_RUN"
     provider_error: str = ""
+    provider_error_details: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {"source_code": self.source_code, "provider": self.provider,
@@ -78,7 +79,8 @@ class ProposedPolicyResult:
                 "intent_status": self.intent_status, "compilation_status": self.compilation_status,
                 "consistency_status": self.consistency_status,
                 "consistency_errors": self.consistency_errors,
-                "guarantee_status": self.guarantee_status, "provider_error": self.provider_error}
+                "guarantee_status": self.guarantee_status, "provider_error": self.provider_error,
+                "provider_error_details": self.provider_error_details}
 
 
 def _mentioned_classes(text: str) -> list[str]:
@@ -452,22 +454,21 @@ def _extract_policy_source(raw: str) -> str:
 
 def _safe_provider_error(exc: Exception) -> str:
     """Keep provider diagnostics useful without exposing credentials."""
-    message = str(exc)
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if api_key:
-        message = message.replace(api_key, "[redacted]")
-    message = re.sub(r"(?i)(bearer\s+|sk-or-v1-)[A-Za-z0-9._-]+", r"\1[redacted]", message)
-    return message[:1000]
+    return sanitize_provider_message(exc, limit=1000)
 
 
 def _provider_error_result(intent: SchedulingIntent, provider: str, error: Exception) -> ProposedPolicyResult:
     display_name = {"openrouter": "OpenRouter", "anthropic": "Anthropic"}.get(provider, provider.title())
+    details = ({"category": error.category, "upstream_status": error.upstream_status,
+                "retryable": error.retryable} if isinstance(error, ProviderFailure)
+               else {"category": "request", "upstream_status": None, "retryable": False})
     return ProposedPolicyResult(
         source_code="", provider=provider, mode_label=f"{display_name} (Live LLM unavailable)",
         status="PROVIDER_ERROR", proposal_status="PROVIDER_ERROR", is_live_llm=False,
         rationale="No policy was accepted because the explicitly selected live provider failed.",
         extracted_classes=intent.classes, extracted_guarantees=list(intent.requested_guarantees),
         intent=intent.to_dict(), intent_status="SUPPORTED", provider_error=_safe_provider_error(error),
+        provider_error_details=details,
     )
 
 
