@@ -1,8 +1,8 @@
-"""eBPF C emitter skeleton for Linux sched_ext (Phase 4 target).
+"""Compatibility import for the historical Phase 4 emitter module.
 
-Generates real sched_ext struct_ops C code implementing the fixed-size class table,
-priorities, and quanta. Aging dispatch hooks and kernel loading are deliberately
-marked as incomplete/in-progress per the project roadmap.
+The public emitter lives in :mod:`schedguard.codegen.backend`.  Keep this
+module import-compatible for callers that used the old path, but delegate to
+the audited implementation so two different C emitters cannot drift.
 """
 from dataclasses import dataclass, field
 from typing import Any
@@ -190,3 +190,13 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
         limitations=limitations,
         mappings=mappings,
     )
+
+
+# The old implementation is retained only for source compatibility; all
+# callers, including imports through this legacy module, use the audited
+# backend emitter and its honest status/limitation metadata.
+from .backend import emit_ebpf_c as _audited_emit_ebpf_c
+
+
+def emit_ebpf_c(ir: IRPolicy):
+    return _audited_emit_ebpf_c(ir)

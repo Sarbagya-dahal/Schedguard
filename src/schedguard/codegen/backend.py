@@ -30,6 +30,7 @@ class CodegenResult:
     supported_semantics: list[str] = field(default_factory=list)
     unsupported_semantics: list[str] = field(default_factory=list)
     target_kernel: str = "6.12+"
+    status: str = "PASSED"
 
     def to_dict(self) -> dict[str, Any]:
         return {"c_code": self.c_code, "policy_name": self.policy_name,
@@ -38,6 +39,7 @@ class CodegenResult:
                 "supported_semantics": self.supported_semantics,
                 "unsupported_semantics": self.unsupported_semantics,
                 "target_kernel": self.target_kernel,
+                "status": self.status,
                 "mappings": [m.__dict__.copy() for m in self.mappings]}
 
 
@@ -61,6 +63,13 @@ def _validate(ir: IRPolicy) -> None:
 def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     """Emit deterministic sched_ext C for the validated, fixed-size IR."""
     _validate(ir)
+    unsupported: list[str] = []
+    if len(ir.classes) > 1:
+        unsupported.append("runtime task-to-class mapping is undefined for abstract multi-class policies")
+    if any(c.aging_ms for c in ir.classes):
+        unsupported.append("exact aging promotion is not implemented by this backend")
+    if ir.guarantees:
+        unsupported.append("PolicyLang guarantees are not established for real multi-CPU sched_ext execution")
     lines: list[str] = []
     mappings: list[CodeMapping] = []
 
@@ -71,39 +80,57 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     add("/* SchedGuard generated sched_ext program; do not edit by hand. */")
     add(f"/* Policy: {ir.name}; target kernel: Linux 6.12+ */")
     add("/* Source emission is not proof of clang compilation or kernel loading. */")
-    for header in ("vmlinux.h", "bpf/bpf_helpers.h", "bpf/bpf_core_read.h", "scx/common.bpf.h"):
+    for header in ("vmlinux.h", "bpf/bpf_helpers.h", "bpf/bpf_core_read.h", "scx/common.bpf.h", "scx/compat.bpf.h"):
         add(f'#include "{header}"' if header == "vmlinux.h" else f"#include <{header}>")
     add('char LICENSE[] SEC("license") = "GPL";')
     add()
 
     start = add("/* Fixed-size limits copied from the validated IR. */")
     add(f"#define SG_NUM_CLASSES {len(ir.classes)}")
-    add(f"#define SG_MAX_TASKS {ir.max_tasks}")
+    add(f"#define SG_MODEL_MAX_TASKS {ir.max_tasks}")
+    add("#define SG_RUNTIME_MAX_TASKS 4096")
     add("#define SG_DSQ_BASE 1000ULL")
     add("#define SG_NS_PER_MS 1000000ULL")
     end = add()
-    mappings.append(CodeMapping(f"option max_tasks = {ir.max_tasks}", "SG_MAX_TASKS", start, end, "Bounded map and loop limits."))
+    mappings.append(CodeMapping(f"option max_tasks = {ir.max_tasks}", "SG_MODEL_MAX_TASKS", start, end, "Formal-model bound; runtime map capacity is independent."))
 
     add("/* struct sched_class_info is the source-level compatibility name for the IR class table. */")
     add("struct sched_class_info { __u32 prio; __u64 quantum_ns; __u64 aging_ns; };")
     add("struct sg_class_cfg { __u32 prio; __u64 quantum_ns; __u64 aging_ns; };")
     add("struct sg_task_meta { __u32 class_id; __u64 enqueued_ns; __u8 queued; };")
+    add("struct sg_event { __u64 ts_ns; __u32 pid; __u32 class_id; __u32 kind; };")
     add("static const struct sg_class_cfg sg_classes[SG_NUM_CLASSES] = {")
     for c in ir.classes:
         row = add(f"    [{c.idx}] = {{ .prio = {c.prio}, .quantum_ns = {c.quantum_ms}ULL * SG_NS_PER_MS, .aging_ns = {c.aging_ms}ULL * SG_NS_PER_MS }},")
         mappings.append(CodeMapping(f"class {c.name}", f"sg_classes[{c.idx}]", row, row, "Static IR class configuration."))
     add("};")
-    add("struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, SG_MAX_TASKS); __type(key, __u32); __type(value, struct sg_task_meta); } sg_tasks SEC(\".maps\");")
+    add("struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, SG_RUNTIME_MAX_TASKS); __type(key, __u32); __type(value, struct sg_task_meta); } sg_tasks SEC(\".maps\");")
     add("struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 1 << 20); } sg_events SEC(\".maps\");")
     add("static __always_inline __u64 sg_dsq(__u32 id) { return SG_DSQ_BASE + id; }")
+    add("static __always_inline int sg_class_for_task(struct task_struct *p) {")
+    add("    /* PolicyLang has no OS-task classifier; multi-class policies are unsupported. */")
+    add("    return SG_NUM_CLASSES == 1 ? 0 : -1;")
+    add("}")
     add()
 
     enq = add('SEC("struct_ops/enqueue")')
     add("void BPF_STRUCT_OPS(sg_enqueue, struct task_struct *p, u64 enq_flags) {")
-    add("    __u32 pid = BPF_CORE_READ(p, pid); __u32 class_id = 0;")
+    add("    __u32 pid = BPF_CORE_READ(p, pid); int class_id = sg_class_for_task(p);")
+    add("    if (class_id < 0 || class_id >= SG_NUM_CLASSES) {")
+    add("        /* No invented class assignment: preserve liveness via global FIFO. */")
+    add("        scx_bpf_dsq_insert(p, SCX_DSQ_GLOBAL, SCX_SLICE_DFL, enq_flags);")
+    add("        return;")
+    add("    }")
     add("    struct sg_task_meta m = { .class_id = class_id, .enqueued_ns = bpf_ktime_get_ns(), .queued = 1 };")
-    add("    bpf_map_update_elem(&sg_tasks, &pid, &m, BPF_ANY);")
-    add("    scx_bpf_dsq_insert(p, sg_dsq(class_id), SCX_DSQ_INSERT_AT_TAIL, sg_classes[class_id].quantum_ns);")
+    add("    if (bpf_map_update_elem(&sg_tasks, &pid, &m, BPF_ANY)) {")
+    add("        /* Map capacity is runtime-fixed; failed metadata must not stall the task. */")
+    add("        scx_bpf_dsq_insert(p, SCX_DSQ_GLOBAL, SCX_SLICE_DFL, enq_flags);")
+    add("        return;")
+    add("    }")
+    add("    struct sg_event *ev = bpf_ringbuf_reserve(&sg_events, sizeof(*ev), 0);")
+    add("    if (ev) { ev->ts_ns = m.enqueued_ns; ev->pid = pid; ev->class_id = class_id; ev->kind = 1; bpf_ringbuf_submit(ev, 0); }")
+    add("    /* Signature: (task, dsq_id, slice_ns, enqueue_flags). */")
+    add("    scx_bpf_dsq_insert(p, sg_dsq(class_id), sg_classes[class_id].quantum_ns, enq_flags);")
     add("}")
     mappings.append(CodeMapping("task enqueue + metadata", "sg_enqueue", enq, len(lines), "Records lifecycle state and inserts into a bounded DSQ."))
 
@@ -112,7 +139,7 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     add("    __u32 class_id;")
     add("#pragma unroll")
     add("    for (class_id = 0; class_id < SG_NUM_CLASSES; class_id++)")
-    add("        if (scx_bpf_dsq_move_to_local(sg_dsq(class_id))) return;")
+    add("        if (scx_bpf_dsq_move_to_local(sg_dsq(class_id), 0)) return;")
     add("    scx_bpf_consume(SCX_DSQ_GLOBAL);")
     add("}")
     mappings.append(CodeMapping("priority tiers", "sg_dispatch", dispatch, len(lines), "Bounded ascending-priority DSQ scan; lower IR priority wins."))
@@ -121,6 +148,8 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     add("void BPF_STRUCT_OPS(sg_running, struct task_struct *p) {")
     add("    __u32 pid = BPF_CORE_READ(p, pid); struct sg_task_meta *m = bpf_map_lookup_elem(&sg_tasks, &pid);")
     add("    if (m) m->queued = 0;")
+    add("    struct sg_event *ev = bpf_ringbuf_reserve(&sg_events, sizeof(*ev), 0);")
+    add("    if (ev) { ev->ts_ns = bpf_ktime_get_ns(); ev->pid = pid; ev->class_id = m ? m->class_id : 0; ev->kind = 2; bpf_ringbuf_submit(ev, 0); }")
     add("}")
     add('SEC("struct_ops/stopping")')
     add("void BPF_STRUCT_OPS(sg_stopping, struct task_struct *p, bool runnable) {")
@@ -144,8 +173,16 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     add("    .flags = SCX_OPS_ENQ_LAST,")
     add("};")
 
+    status = "UNSUPPORTED" if unsupported else "PASSED"
     return CodegenResult(
-        "\n".join(lines) + "\n", ir.name, False, "EMISSION_SUCCEEDED (BUILD_NOT_RUN)",
-        ["Phase 4 emission succeeded; clang/BPF compilation is a separate explicit stage.", "Formal proof remains single-CPU and CPU-bound; blocking, arrivals, and multi-CPU execution are outside scope.", "Class metadata defaults to class 0 until the loader installs a task mapping.", "Aging configuration is emitted and timestamped, but exact promotion ahead of higher tiers is not yet claimed by this backend.", "Kernel load/runtime tests require explicit operator action in a Linux VM."],
-        mappings, ["fixed-size class table", "priority DSQs", "quantum", "enqueue/dispatch/running/stopping/init/exit callbacks", "ring-buffer map"], ["exact aging promotion", "userspace task-class mapping"], "6.12+",
+        c_code="\n".join(lines) + "\n", policy_name=ir.name, is_complete=False,
+        status_label=("UNSUPPORTED" if unsupported else "EMISSION_SUCCEEDED (BUILD_NOT_RUN)"),
+        limitations=["Phase 4 source emission is not clang compilation or kernel loading.",
+                     "Formal proof remains single-CPU and CPU-bound; blocking, arrivals, and multi-CPU execution are outside scope.",
+                     "The runtime task map is fixed at SG_RUNTIME_MAX_TASKS=4096; SG_MODEL_MAX_TASKS is only the formal-model bound.",
+                     "Kernel load/runtime tests require explicit operator action in a Linux VM."] + unsupported,
+        mappings=mappings,
+        supported_semantics=["fixed-size class table", "priority DSQs", "quantum slice", "enqueue/dispatch/running/stopping/init/exit callbacks", "ring-buffer event emission"],
+        unsupported_semantics=unsupported,
+        target_kernel="6.12+", status=status,
     )

@@ -33,7 +33,7 @@ def test_ebpf_codegen_emits_skeleton_and_mappings():
     assert not cg.is_complete
     assert "sched_ext" in cg.c_code
     assert "struct sched_class_info" in cg.c_code
-    assert "SEC(\"struct_ops/sched_dispatch\")" in cg.c_code
+    assert "SEC(\"struct_ops/dispatch\")" in cg.c_code
     assert len(cg.mappings) >= 2
     assert any("Phase 4" in lim for lim in cg.limitations)
 

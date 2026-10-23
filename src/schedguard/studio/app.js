@@ -136,8 +136,37 @@ document.addEventListener("DOMContentLoaded", async () => {
 function initPhase4Workbench() {
   const preflightBtn = document.getElementById("phase4PreflightBtn");
   const emitBtn = document.getElementById("phase4EmitBtn");
+  const buildBtn = document.getElementById("phase4BuildBtn");
   if (preflightBtn) preflightBtn.addEventListener("click", loadPhase4Preflight);
   if (emitBtn) emitBtn.addEventListener("click", emitPhase4Source);
+  if (buildBtn) buildBtn.addEventListener("click", buildPhase4Source);
+}
+
+async function buildPhase4Source() {
+  const source = document.getElementById("phase4CodeOutput")?.textContent?.trim();
+  const output = document.getElementById("phase4BuildOutput");
+  const status = document.getElementById("phase4BuildStatus");
+  if (!source || source.startsWith("Generate source")) {
+    if (status) status.textContent = "Generate source before requesting a build.";
+    return;
+  }
+  if (output) output.textContent = "Checking prerequisites and build status…";
+  try {
+    const body = {
+      source,
+      output: "build/studio-generated.bpf.o",
+      vmlinux_header: document.getElementById("phase4VmlinuxInput")?.value?.trim() || null,
+      scx_header: document.getElementById("phase4ScxInput")?.value?.trim() || null,
+    };
+    const res = await fetch("/api/phase4/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `API returned ${res.status}`);
+    if (output) output.textContent = JSON.stringify(data, null, 2);
+    if (status) status.textContent = `${data.status || "NOT_RUN"}. Kernel loading remains a separate authorized step.`;
+  } catch (err) {
+    if (output) output.textContent = `Build failed: ${err.message}`;
+    if (status) status.textContent = "Build request failed; no kernel action was attempted.";
+  }
 }
 
 async function loadPhase4Preflight() {

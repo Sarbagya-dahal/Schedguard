@@ -8,7 +8,7 @@ checked by a **safety pass** and a **Z3-based property verifier**, replayed in a
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export PYTHONPATH=src:experiments
-python -m pytest -q                                  # 71 tests
+python -m pytest -q                                  # full regression suite
 python -m schedguard check   examples/strict_starves.sched   # VIOLATED + counterexample + replay
 python -m schedguard analyze examples/aging_fix.sched        # provable worst-case wait / min share
 python -m schedguard simulate examples/aging_fix.sched workloads/web_batch.json

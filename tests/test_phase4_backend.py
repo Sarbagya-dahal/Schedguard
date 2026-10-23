@@ -12,9 +12,29 @@ def test_phase4_emitter_is_deterministic_and_bounded():
     ir = compile_file("examples/aging_fix.sched").ir
     one = emit_ebpf_c(ir)
     assert one.c_code == emit_ebpf_c(ir).c_code
-    assert "#define SG_MAX_TASKS" in one.c_code
+    assert "#define SG_MODEL_MAX_TASKS 8" in one.c_code
+    assert "#define SG_RUNTIME_MAX_TASKS 4096" in one.c_code
     assert "BPF_STRUCT_OPS(sg_dispatch" in one.c_code
-    assert one.status_label == "EMISSION_SUCCEEDED (BUILD_NOT_RUN)"
+    assert one.status == "UNSUPPORTED"
+    assert any("exact aging promotion is not implemented" in item for item in one.unsupported_semantics)
+
+
+def test_phase4_emitter_uses_real_dsq_argument_order_and_failure_paths():
+    ir = compile_file("examples/balanced.sched").ir
+    result = emit_ebpf_c(ir)
+    assert "scx_bpf_dsq_insert(p, sg_dsq(class_id), sg_classes[class_id].quantum_ns, enq_flags)" in result.c_code
+    assert "SCX_DSQ_INSERT_AT_TAIL" not in result.c_code
+    assert "bpf_map_update_elem(&sg_tasks" in result.c_code
+    assert "bpf_ringbuf_reserve(&sg_events" in result.c_code
+    assert "scx_bpf_dsq_move_to_local(sg_dsq(class_id), 0)" in result.c_code
+
+
+def test_phase4_emitter_does_not_invent_multiclass_task_mapping():
+    ir = compile_file("examples/aging_fix.sched").ir
+    result = emit_ebpf_c(ir)
+    assert result.status == "UNSUPPORTED"
+    assert any("runtime task-to-class mapping is undefined" in item for item in result.unsupported_semantics)
+    assert "return SG_NUM_CLASSES == 1 ? 0 : -1;" in result.c_code
 
 
 def test_phase4_preflight_is_inspection_only():

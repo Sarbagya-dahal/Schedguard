@@ -744,7 +744,7 @@ def api_source_files():
         {"path": "src/schedguard/inference/schema.py", "title": "Property Library & Schema Gate", "component": "AI Proposal Gate", "lines": 81},
         {"path": "src/schedguard/inference/pipeline.py", "title": "AI Propose -> Gate -> Verify Loop", "component": "AI Proposal Gate", "lines": 49},
         {"path": "src/schedguard/adapt.py", "title": "Adaptive Parameter Tuner", "component": "Adaptive Tuner", "lines": 160},
-        {"path": "src/schedguard/codegen/ebpf.py", "title": "eBPF sched_ext C Skeleton Emitter", "component": "Backend Codegen", "lines": 140},
+        {"path": "src/schedguard/codegen/backend.py", "title": "Audited sched_ext C Emitter", "component": "Backend Codegen", "lines": 180},
     ]
     return {"files": curated}
 

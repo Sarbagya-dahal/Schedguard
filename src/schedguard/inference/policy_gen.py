@@ -309,6 +309,9 @@ def check_intent_consistency(intent: SchedulingIntent, source_code: str) -> tupl
         return "MISMATCH", [str(d) for d in result.diagnostics], "COMPILATION_FAILED"
     errors = []
     by_name = {c.name: c for c in result.ir.classes}
+    missing_classes = [name for name in intent.classes if name not in by_name]
+    if missing_classes:
+        errors.append("Missing requested class(es): " + ", ".join(missing_classes) + ".")
     for name, value in intent.priority_values.items():
         if name in by_name and by_name[name].prio != value:
             errors.append(f"{name} priority is {by_name[name].prio}, requested {value}.")
@@ -425,6 +428,7 @@ def _live_policy_result(provider: str, mode_label: str, intent: SchedulingIntent
         status="UNTRUSTED_PROPOSAL", proposal_status=("PROPOSAL_GENERATED" if consistency == "MATCH" else "PROPOSAL_REJECTED"),
         is_live_llm=True, rationale="Live LLM candidate checked against extracted intent; acceptance remains verifier-authoritative.",
         extracted_classes=intent.classes, intent=intent.to_dict(),
+        extracted_guarantees=list(intent.requested_guarantees),
         compilation_status=compilation, consistency_status=consistency,
         consistency_errors=errors,
     )

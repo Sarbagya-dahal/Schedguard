@@ -17,8 +17,19 @@ with `vmlinux.h`, libbpf headers, `scx/common.bpf.h`, and
 The formal proof remains the single-CPU, CPU-bound model in `docs/MODEL.md`.
 Linux blocking, arrivals, multiple CPUs, kernel preemption details, BPF
 verifier acceptance, and runtime behavior are separate validation concerns.
-Task class assignment is intentionally a loader responsibility; the emitted
-source defaults to class 0 until a VM loader installs metadata.
+Task class assignment is intentionally a loader responsibility. For a
+multi-class IR, the emitted source refuses to invent a PID/process mapping and
+routes unmappable tasks to the global FIFO, reporting `UNSUPPORTED`. A
+single-class IR can be emitted with its only class selected. Aging promotion
+and PolicyLang guarantee claims remain explicitly unsupported by this backend.
+
+The generated enqueue call follows the sched_ext ABI order
+`(task, dsq_id, slice_ns, enqueue_flags)` and includes the sched_ext
+compatibility header for version-sensitive helpers. The task metadata map has
+an explicit runtime capacity (`SG_RUNTIME_MAX_TASKS=4096`) separate from the
+formal model bound (`SG_MODEL_MAX_TASKS`); map insertion failures route to the
+global FIFO. Ring-buffer reservations are checked before submitting lifecycle
+events.
 
 ## Safe workflow
 
