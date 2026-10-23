@@ -146,6 +146,6 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
 
     return CodegenResult(
         "\n".join(lines) + "\n", ir.name, False, "EMISSION_SUCCEEDED (BUILD_NOT_RUN)",
-        ["Phase 4 emission succeeded; clang/BPF compilation is a separate explicit stage.", "Formal proof remains single-CPU and CPU-bound; blocking, arrivals, and multi-CPU execution are outside scope.", "Class metadata defaults to class 0 until the loader installs a task mapping.", "Kernel load/runtime tests require explicit operator action in a Linux VM."],
-        mappings, ["fixed-size class table", "priority DSQs", "quantum", "enqueue/dispatch/running/stopping/init/exit callbacks", "ring-buffer map"], [], "6.12+",
+        ["Phase 4 emission succeeded; clang/BPF compilation is a separate explicit stage.", "Formal proof remains single-CPU and CPU-bound; blocking, arrivals, and multi-CPU execution are outside scope.", "Class metadata defaults to class 0 until the loader installs a task mapping.", "Aging configuration is emitted and timestamped, but exact promotion ahead of higher tiers is not yet claimed by this backend.", "Kernel load/runtime tests require explicit operator action in a Linux VM."],
+        mappings, ["fixed-size class table", "priority DSQs", "quantum", "enqueue/dispatch/running/stopping/init/exit callbacks", "ring-buffer map"], ["exact aging promotion", "userspace task-class mapping"], "6.12+",
     )
