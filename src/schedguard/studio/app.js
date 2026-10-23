@@ -15,6 +15,23 @@ const appState = {
   activeView: "view-overview",
 };
 
+async function apiErrorMessage(response) {
+  let payload = null;
+  try { payload = await response.json(); } catch (_) { /* non-JSON proxy response */ }
+  const error = payload?.error;
+  if (error?.message) {
+    const context = [
+      error.provider ? `provider ${error.provider}` : "",
+      error.category ? `category ${error.category}` : "",
+      error.upstream_status ? `upstream ${error.upstream_status}` : "",
+      typeof error.retryable === "boolean" ? (error.retryable ? "retryable" : "not retryable") : "",
+    ].filter(Boolean).join(", ");
+    const reference = error.correlation_id ? ` (reference ${error.correlation_id})` : "";
+    return `${error.operation || "Request"}: ${error.message}${context ? ` [${context}]` : ""}${reference}`;
+  }
+  return payload?.detail || payload?.message || `HTTP ${response.status}`;
+}
+
 // Preset Natural Language Intent Prompts
 const PRESET_INTENTS = {
   web_batch: "Prioritize interactive web tasks, give batch tasks a longer time quantum, and prevent batch starvation with a maximum waiting-time requirement of 400 milliseconds.",
@@ -341,7 +358,8 @@ async function runPhase3Synthesis() {
   status.textContent = "Generating and verifying…"; status.className = "phase3-status status-running";
   try {
     const res = await fetch("/api/synthesize", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({prompt, provider, repair:true})});
-    const data = await res.json(); if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(await apiErrorMessage(res));
+    const data = await res.json();
     const p = data.proposal || {};
     document.getElementById("synthesisSource").textContent = data.source || "No source generated.";
     const copy = document.getElementById("synthesisCopyBtn"); copy.disabled = !data.source;
@@ -535,7 +553,7 @@ async function executeCompileAndRun() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source: code, replay: true }),
     });
-    if (!res.ok) throw new Error(`API returned ${res.status}`);
+    if (!res.ok) throw new Error(await apiErrorMessage(res));
     runRecord = await res.json();
   } catch (err) {
     // This is a request/API failure, not a compiler failure. A compiler failure

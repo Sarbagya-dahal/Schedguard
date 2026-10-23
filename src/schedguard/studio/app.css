@@ -313,6 +313,7 @@ body {
    ========================================================================== */
 .workbench-main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -714,6 +715,17 @@ body {
 .data-table tr:hover td {
   background-color: var(--bg-hover);
 }
+
+#recentRunsTable th:last-child,
+#recentRunsTable td:last-child {
+  position: sticky;
+  right: 0;
+  white-space: nowrap;
+  background: var(--bg-card);
+  box-shadow: -8px 0 10px -10px rgba(38, 34, 28, .45);
+}
+
+#recentRunsTable th:last-child { background: var(--bg-card-alt); }
 
 .empty-cell {
   text-align: center;
@@ -1722,6 +1734,8 @@ body.theme-light { background: var(--bg-canvas); color: var(--text-primary); let
 .brand-title { color: var(--text-primary); font-weight: 700; letter-spacing: -.02em; }
 .brand-edition { color: var(--text-muted); }
 .sidebar-nav { padding: 18px 12px; gap: 3px; }
+.nav-section-label { display: block; margin: 17px 8px 5px; color: var(--text-muted); font: 700 10px var(--font-sans); letter-spacing: .1em; text-transform: uppercase; }
+.nav-section-label:first-of-type { margin-top: 11px; }
 .nav-item { min-height: 39px; border: 1px solid transparent; border-radius: 8px; color: var(--text-secondary); font-size: 13px; }
 .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 .nav-item.active { background: var(--accent-subtle); color: var(--accent-primary); border-color: #cbdccc; font-weight: 600; }
@@ -1761,3 +1775,38 @@ input:focus, select:focus, textarea:focus, .select-field:focus { outline: 3px so
 .phase4-stage { color: var(--text-muted); font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
 .phase4-page .code-output { margin-top: 14px; min-height: 120px; max-height: 420px; }
 @media (max-width: 900px) { .phase4-grid { grid-template-columns: 1fr; } .view-panel { padding: 24px 16px 40px; } .sidebar { width: min(84vw, 300px); } }
+
+/* Keep the policy workspace usable on phone-width screens.  The navigation
+   remains available as icon buttons; their text stays in the accessibility
+   tree rather than being removed with display:none. */
+@media (max-width: 600px) {
+  .sidebar { width: 60px; }
+  .sidebar-brand { padding: 16px 10px; justify-content: center; }
+  .sidebar .brand-text, .sidebar .nav-section-label { display: none; }
+  .sidebar .sidebar-toggle-btn { display: none; }
+  .sidebar-nav { padding: 14px 8px; }
+  .sidebar .nav-item { justify-content: center; padding: 10px 0; }
+  .sidebar .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .sidebar-footer { padding: 12px 8px; }
+  .sidebar .theme-toggle-btn, .sidebar .help-btn { justify-content: center; }
+  .overview-header {
+    padding: 24px 16px 18px;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .overview-header .btn { align-self: stretch; }
+  .runs-history-card {
+    width: calc(100% - 32px);
+    margin: 0 16px 28px;
+    padding: 16px;
+  }
+  .history-header { align-items: flex-start; gap: 10px; }
+  .history-header .btn { flex-shrink: 0; }
+}
