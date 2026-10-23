@@ -25,6 +25,8 @@ from .repair.classify import classify_violation
 from .repair.loop import repair_policy
 from .adapt import tune_policy
 from .codegen import emit_ebpf_c
+from .codegen.build import build_ebpf, check_toolchain
+from .runtime import LifecycleState, preflight, watchdog_check
 from .report import create_run_record, get_run, list_runs, generate_run_pdf, aggregate_verdicts
 
 ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -117,6 +119,13 @@ class AdaptRequest(BaseModel):
     range_min: Optional[int] = None
     range_max: Optional[int] = None
     num_steps: int = 8
+
+
+class BuildRequest(BaseModel):
+    source: str
+    output: str = "build/schedguard.bpf.o"
+    vmlinux_header: Optional[str] = None
+    scx_header: Optional[str] = None
 
 
 # ---------------------------------------------------------
@@ -645,13 +654,42 @@ def api_adapt(req: AdaptRequest):
 
 @app.post("/api/codegen")
 def api_codegen(req: SourceRequest):
-    """Emits sched_ext eBPF C skeleton with mapping metadata and limitations."""
+    """Emit sched_ext C; emission does not claim compilation or loading."""
     res = compile_source(req.source)
     if not res.ok or res.ir is None:
         raise HTTPException(status_code=400, detail="Cannot generate C: compilation errors exist")
 
     cg_res = emit_ebpf_c(res.ir)
     return cg_res.to_dict()
+
+
+@app.get("/api/phase4/preflight")
+def api_phase4_preflight(vmlinux_header: Optional[str] = None, scx_header: Optional[str] = None):
+    """Read-only host/toolchain inspection; never loads a scheduler."""
+    return {"runtime": preflight().to_dict(), "toolchain": check_toolchain(vmlinux_header, scx_header).to_dict()}
+
+
+@app.post("/api/phase4/build")
+def api_phase4_build(req: BuildRequest):
+    """Build generated source only when a caller supplies a real Linux toolchain."""
+    root = ROOT_DIR.resolve()
+    source_path = (root / "build" / "generated.schedguard.c").resolve()
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_text(req.source, encoding="utf-8")
+    output = (root / req.output).resolve()
+    try:
+        output.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="build output must remain inside repository") from exc
+    return build_ebpf(source_path, output, req.vmlinux_header, req.scx_header).to_dict()
+
+
+@app.get("/api/phase4/lifecycle")
+def api_phase4_lifecycle():
+    """Return safe default lifecycle state and current read-only preflight."""
+    state = LifecycleState()
+    return {"state": state.to_dict(), "preflight": preflight().to_dict(),
+            "load_policy": "NOT_RUN: explicit Linux VM authorization required"}
 
 
 @app.get("/api/examples")

@@ -214,6 +214,36 @@ def cmd_synth(a):
     raise SystemExit(0 if result.success else 1)
 
 
+def cmd_emit(a):
+    from .codegen import emit_ebpf_c
+    result = emit_ebpf_c(_load(a.policy))
+    if a.output:
+        with open(a.output, "w", encoding="utf-8", newline="\n") as f:
+            f.write(result.c_code)
+    print(json.dumps(result.to_dict(), indent=2) if a.json else
+          f"{result.status_label}: {a.output or 'stdout'}")
+    if not a.output:
+        print(result.c_code)
+
+
+def cmd_preflight(a):
+    from .codegen.build import check_toolchain
+    from .runtime import preflight
+    result = {"runtime": preflight().to_dict(), "toolchain": check_toolchain(a.vmlinux, a.scx_header).to_dict()}
+    print(json.dumps(result, indent=2) if a.json else json.dumps(result, indent=2))
+
+
+def cmd_build(a):
+    from .codegen import emit_ebpf_c
+    from .codegen.build import build_ebpf
+    result = emit_ebpf_c(_load(a.policy))
+    with open(a.source, "w", encoding="utf-8", newline="\n") as f:
+        f.write(result.c_code)
+    built = build_ebpf(a.source, a.output, a.vmlinux, a.scx_header)
+    print(json.dumps(built.to_dict(), indent=2))
+    raise SystemExit(0 if built.status == "COMPILE_SUCCEEDED" else 1)
+
+
 def cmd_studio(a):
     import uvicorn
     from .server import app
@@ -241,6 +271,14 @@ def main(argv=None):
     s = sub.add_parser("synth", help="propose and verify a policy from an intent")
     s.add_argument("intent"); s.add_argument("--provider", choices=["stub", "anthropic", "openrouter"], default=None)
     s.add_argument("--no-repair", action="store_true"); s.add_argument("--json", action="store_true"); s.set_defaults(f=cmd_synth)
+
+    s = sub.add_parser("emit", help="emit bounded sched_ext C without loading it")
+    s.add_argument("policy"); s.add_argument("-o", "--output", default=None); s.add_argument("--json", action="store_true"); s.set_defaults(f=cmd_emit)
+    s = sub.add_parser("preflight", help="inspect Linux sched_ext/BPF prerequisites")
+    s.add_argument("--vmlinux", default=None); s.add_argument("--scx-header", default=None); s.add_argument("--json", action="store_true"); s.set_defaults(f=cmd_preflight)
+    s = sub.add_parser("build", help="emit and compile sched_ext C; never loads it")
+    s.add_argument("policy"); s.add_argument("--source", default="build/generated.schedguard.c"); s.add_argument("-o", "--output", default="build/schedguard.bpf.o")
+    s.add_argument("--vmlinux", default=None); s.add_argument("--scx-header", default=None); s.set_defaults(f=cmd_build)
 
     s = sub.add_parser("attack")
     s.add_argument("incumbent")

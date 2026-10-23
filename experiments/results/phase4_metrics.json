@@ -1,0 +1,33 @@
+{
+  "schema": "schedguard.phase4_metrics.v1",
+  "status": "NOT_RUN",
+  "reason": "No genuine paired Linux sched_ext simulator/real-kernel observations are available in this environment.",
+  "environment": {
+    "host": "Windows",
+    "target_kernel": "Linux 6.12+",
+    "seed": 0
+  },
+  "conditions": {
+    "existing_gate": {
+      "status": "NOT_RUN",
+      "samples": 0
+    },
+    "constant_error_baseline": {
+      "status": "NOT_RUN",
+      "samples": 0
+    },
+    "learned_predictor": {
+      "status": "NOT_RUN",
+      "samples": 0
+    },
+    "full_gate": {
+      "status": "NOT_RUN",
+      "samples": 0
+    }
+  },
+  "limitations": [
+    "kernel compilation/load not run",
+    "real telemetry not collected",
+    "predictor accuracy not validated"
+  ]
+}

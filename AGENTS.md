@@ -99,7 +99,13 @@ python experiments/run_phase2_metrics.py
       bounded parameter space, regression & scope-violation objectives, Random / HillClimb / LLM attackers,
       pre-deployment regression gate (`gate.py`), planted-regression benchmark suite (`planted_regressions.py`),
       multi-seed metrics runner (`run_phase2_metrics.py`), CLI `attack` & `gate`. 71 tests passing.
-- [ ] Phase 3 (Feature 3), Phase 4 (Feature 4 + real sched_ext backend): see ROADMAP.md
+- [x] Phase 3 (Feature 3): violation classification, bounded repair loop, synthesis integration, and benchmark corpus
+- [~] Phase 4 scaffolding: bounded sched_ext emitter, build/preflight API, lifecycle/watchdog state, real-trace schema, predictor interface, conservative gate integration, and NOT_RUN evaluation report. Linux 6.12+ VM compilation/load/telemetry and learned-model validation remain unrun.
+
+Phase 4 details and safe VM workflow are in `docs/PHASE4.md` and
+`docs/PHASE4_EVALUATION.md`. The Windows Studio must remain inspection,
+emission, formal verification, and dry-run only; no default path may load a
+kernel scheduler.
 
 ## Good first prompts for an assistant
 - "Write experiments/eval_inference.py per the Phase 1b spec in AGENTS.md and add 12 diverse intents."

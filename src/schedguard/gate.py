@@ -15,6 +15,7 @@ from .sim.workload import Workload
 from .verify.properties import check_all
 from .adversary.objectives import RegressionObjective, RegressionResult
 from .adversary.attackers import Attacker, RandomAttacker, AttackResult
+from .predictor import ErrorPredictor
 
 
 @dataclass
@@ -25,6 +26,7 @@ class GateDecision:
     recorded_trace_results: list[dict] = field(default_factory=list)
     attack_result: dict | None = None
     worst_workload: dict | None = None
+    predictor_result: dict | None = None
     limitations: str = (
         "Notice: A failure to find a regression within a finite search budget "
         "is not a mathematical proof of universal dynamic safety."
@@ -38,6 +40,7 @@ class GateDecision:
             "recorded_trace_results": self.recorded_trace_results,
             "attack_result": self.attack_result,
             "worst_workload": self.worst_workload,
+            "predictor_result": self.predictor_result,
             "limitations": self.limitations,
         }
 
@@ -71,6 +74,7 @@ def evaluate_candidate(
     target_class: str | None = None,
     metric_name: str = "p99_dispatch_latency",
     horizon_ms: int = 10_000,
+    error_predictor: ErrorPredictor | None = None,
 ) -> GateDecision:
     """Evaluate whether candidate is safe to deploy against incumbent."""
     reasons: list[str] = []
@@ -86,7 +90,24 @@ def evaluate_candidate(
         if not target_class and incumbent.classes:
             target_class = incumbent.classes[0].name
 
-    obj = RegressionObjective(target_class=target_class, metric_name=metric_name, tolerance=tolerance)
+    predictor_result = None
+    effective_tolerance = tolerance
+    if error_predictor is not None:
+        features = {
+            "class_count": float(len(candidate.classes)),
+            "max_tasks": float(candidate.max_tasks),
+            "mean_quantum_ms": sum(c.quantum_ms for c in candidate.classes) / max(1, len(candidate.classes)),
+            "max_aging_ms": float(max((c.aging_ms for c in candidate.classes), default=0)),
+        }
+        prediction = error_predictor.predict(features)
+        predictor_result = prediction.to_dict()
+        if prediction.status in ("PREDICTED", "CONSTANT_FALLBACK"):
+            # Uncertainty consumes tolerance and can only make the gate stricter.
+            effective_tolerance = max(0.0, tolerance - prediction.predicted_abs_error - prediction.uncertainty)
+        else:
+            effective_tolerance = 0.0
+
+    obj = RegressionObjective(target_class=target_class, metric_name=metric_name, tolerance=effective_tolerance)
 
     # 1. Static formal verification gate
     verdicts = check_all(candidate)
@@ -120,7 +141,7 @@ def evaluate_candidate(
         if res.is_regression:
             reasons.append(
                 f"Regression on recorded trace '{name}': {res.metric_name} regressed by "
-                f"{res.regression:.1f} (exceeds tolerance {tolerance})"
+                f"{res.regression:.1f} (exceeds effective tolerance {effective_tolerance:.1f})"
             )
 
     # 3. Adversarial search gate
@@ -134,7 +155,7 @@ def evaluate_candidate(
     if atk_res.worst_result and atk_res.worst_result.is_regression:
         reasons.append(
             f"Adversarial search ({attacker.__class__.__name__}) found regression of "
-            f"{atk_res.best_regression:.1f} exceeding tolerance {tolerance}"
+            f"{atk_res.best_regression:.1f} exceeding effective tolerance {effective_tolerance:.1f}"
         )
 
     decision = "REJECT" if reasons else "ACCEPT"
@@ -146,4 +167,5 @@ def evaluate_candidate(
         recorded_trace_results=trace_results,
         attack_result=atk_res.to_dict(),
         worst_workload=worst_wl.to_dict() if worst_wl else None,
+        predictor_result=predictor_result,
     )

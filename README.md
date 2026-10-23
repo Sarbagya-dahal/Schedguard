@@ -19,6 +19,9 @@ python experiments/run_metrics.py                    # regenerates experiments/r
 python experiments/eval_inference.py                 # runs Phase 1b rule-vs-LLM eval harness
 python experiments/planted_regressions.py            # runs Phase 2 planted regression benchmark
 python experiments/run_phase2_metrics.py             # runs Phase 2 multi-seed attacker metrics
+python -m schedguard preflight --json                 # read-only Phase 4 host/toolchain check
+python -m schedguard emit examples/aging_fix.sched -o build/aging_fix.c
+python experiments/run_phase4_metrics.py              # explicit NOT_RUN until real VM data exists
 ```
 
 ### LLM Providers
@@ -38,3 +41,6 @@ python experiments/run_phase2_metrics.py             # runs Phase 2 multi-seed a
   If no API keys are set, `--provider stub` and the rule-table baseline work fully offline with zero external network access. All responses are strictly validated through `schema.validate` before reaching the Z3 verifier.
 
 Read `AGENTS.md` first (architecture, invariants, next steps) and `docs/MODEL.md` (formal model).
+Phase 4 backend stages and their real-kernel limitations are documented in
+`docs/PHASE4.md` and `docs/PHASE4_EVALUATION.md`. Kernel loading is never a
+default Studio or CLI action and requires an explicit Linux VM workflow.
