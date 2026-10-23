@@ -12,6 +12,8 @@ RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 # In-memory session store
 _RUNS_CACHE: dict[str, dict[str, Any]] = {}
+BACKEND_STAGES = ("emission", "build", "preflight", "load", "telemetry", "predictor", "watchdog", "hot_swap")
+BACKEND_STATUSES = {"NOT_RUN", "UNSUPPORTED", "FAILED", "PASSED", "EXPERIMENTAL"}
 
 
 def aggregate_verdicts(
@@ -68,6 +70,28 @@ def aggregate_verdicts(
     }
 
 
+def _backend_status(value: Any) -> str:
+    if isinstance(value, dict):
+        value = value.get("status")
+    normalized = str(value or "NOT_RUN").upper()
+    return normalized if normalized in BACKEND_STATUSES else "NOT_RUN"
+
+
+def normalize_backend_evidence(run: dict[str, Any]) -> dict[str, str]:
+    """Normalize old and new run snapshots without inferring runtime success.
+
+    Emission belongs to the code-generation result; every later stage needs
+    explicit persisted evidence.  Older snapshots therefore remain `NOT_RUN`.
+    """
+    codegen = run.get("codegen") or {}
+    recorded = run.get("backend_evidence") or {}
+    runtime = codegen.get("runtime_evidence") or {}
+    evidence = {stage: _backend_status(recorded.get(stage, runtime.get(stage))) for stage in BACKEND_STAGES}
+    if codegen.get("c_code") or codegen.get("status") or codegen.get("status_label"):
+        evidence["emission"] = _backend_status(codegen.get("status"))
+    return evidence
+
+
 def _load_persisted_runs():
     global _RUNS_CACHE
     if not RUNS_DIR.exists():
@@ -116,6 +140,7 @@ def create_run_record(
             "kernel_distinction": "This formal analyzer verifies scheduling-level properties (starvation, CPU share bounds) under our formal model. It is NOT the Linux in-kernel BPF verifier (which checks register safety/memory safety). Real-kernel sched_ext loading and execution have not been attempted and remain Phase 4 objectives."
         }
     }
+    record["backend_evidence"] = normalize_backend_evidence(record)
     if "analysis_status" not in record["check"]:
         record["check"]["analysis_status"] = "COMPLETED" if compile_data.get("ok") else "NOT_RUN"
     record["check"]["aggregate"] = aggregate_verdicts(
@@ -368,15 +393,17 @@ def generate_run_pdf(run: dict[str, Any]) -> bytes:
             pdf.cell(40, 5, f"{st.get('max_wait_ms', 0)} ms", 1, align="R", new_x=XPos.RIGHT, new_y=YPos.TOP)
             pdf.cell(40, 5, f"{st.get('dispatches', 0)}", 1, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    # 6. eBPF C Backend Status
+    # 6. sched_ext evidence: source emission, build, and runtime stages are distinct.
     pdf.section_heading("6. eBPF C Backend (sched_ext) Status")
     pdf.set_font("Helvetica", "", 8)
-    pdf.cell(0, 4.5, "Emitted C Skeleton Status: Partial Skeleton (Phase 4 scope)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    backend = normalize_backend_evidence(run)
+    pdf.cell(0, 4.5, f"Emission: {backend['emission']}  |  Build: {backend['build']}  |  Preflight: {backend['preflight']}  |  Load: {backend['load']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 4.5, f"Telemetry: {backend['telemetry']}  |  Predictor: {backend['predictor']}  |  Watchdog: {backend['watchdog']}  |  Hot swap: {backend['hot_swap']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font("Helvetica", "I", 7.5)
-    pdf.multi_cell(190, 4.0, (
-        "- Priority tiers and time quanta are successfully lowered to C struct_ops definitions.\n"
-        "- Incomplete: Aging boost promotion requires in-kernel BPF timer integration (Phase 4).\n"
-        "- Kernel loading has not been attempted and requires a Linux kernel >= 6.12 environment."
-    ))
+    limitations = (run.get("codegen") or {}).get("limitations") or [
+        "No backend evidence was recorded for this run. Source generation, target compilation, and kernel runtime are separate stages.",
+        "Formal verifier results use the documented single-CPU static CPU-bound model; simulator and telemetry provenance are distinct.",
+    ]
+    pdf.multi_cell(190, 4.0, "\n".join(f"- {item}" for item in limitations))
 
     return bytes(pdf.output())
