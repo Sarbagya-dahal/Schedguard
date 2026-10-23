@@ -19,6 +19,7 @@ CLASS_ALIASES = {
 class SchedulingIntent:
     classes: list[str] = field(default_factory=list)
     priority_order: list[str] = field(default_factory=list)
+    priority_edges: list[tuple[str, str]] = field(default_factory=list)
     quantum_order: list[str] = field(default_factory=list)
     quantum_values: dict[str, int] = field(default_factory=dict)
     aging_values: dict[str, int] = field(default_factory=dict)
@@ -33,11 +34,12 @@ class SchedulingIntent:
 
     @property
     def supported(self) -> bool:
-        return bool(self.classes or self.priority_order or self.quantum_order or self.quantum_values or
+        return bool(self.classes or self.priority_order or self.priority_values or self.quantum_order or self.quantum_values or
                     self.aging_values or self.wait_requirements or self.min_share_requirements) and not self.conflicts and not self.unsupported
 
     def to_dict(self) -> dict[str, Any]:
         return {"classes": self.classes, "priority_order": self.priority_order,
+                "priority_edges": self.priority_edges,
                 "quantum_order": self.quantum_order, "quantum_values": self.quantum_values,
                 "aging_values": self.aging_values, "priority_values": self.priority_values,
                 "wait_requirements": self.wait_requirements,
@@ -105,6 +107,64 @@ def _add_order(order: list[str], high: str, low: str, conflicts: list[str], labe
         order.append(low)
 
 
+def _has_cycle(edges: list[tuple[str, str]]) -> bool:
+    """Return whether directed ``higher-than`` edges contain a precedence cycle."""
+    graph: dict[str, list[str]] = {}
+    for high, low in edges:
+        graph.setdefault(high, []).append(low)
+        graph.setdefault(low, [])
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node: str) -> bool:
+        if node in visiting:
+            return True
+        if node in visited:
+            return False
+        visiting.add(node)
+        cyclic = any(visit(neighbor) for neighbor in graph[node])
+        visiting.remove(node)
+        visited.add(node)
+        return cyclic
+
+    return any(visit(node) for node in graph)
+
+
+def _topological_order(edges: list[tuple[str, str]], names: list[str]) -> list[str]:
+    """Produce a stable highest-to-lowest order for an acyclic edge set."""
+    nodes = list(dict.fromkeys([*names, *(node for edge in edges for node in edge)]))
+    outgoing = {node: [] for node in nodes}
+    indegree = {node: 0 for node in nodes}
+    for high, low in edges:
+        if low not in outgoing[high]:
+            outgoing[high].append(low)
+            indegree[low] += 1
+    ordered: list[str] = []
+    available = [node for node in nodes if indegree[node] == 0]
+    while available:
+        node = available.pop(0)
+        ordered.append(node)
+        for neighbor in outgoing[node]:
+            indegree[neighbor] -= 1
+            if indegree[neighbor] == 0:
+                available.append(neighbor)
+    return ordered if len(ordered) == len(nodes) else []
+
+
+def _add_priority_relation(intent: SchedulingIntent, high: str, low: str) -> None:
+    if high == low:
+        intent.conflicts.append("A class cannot be both sides of the priority relationship.")
+        return
+    edge = (high, low)
+    if edge not in intent.priority_edges:
+        intent.priority_edges.append(edge)
+    if _has_cycle(intent.priority_edges):
+        intent.conflicts.append(f"Contradictory priority requirements form a cycle involving {high} and {low}.")
+        return
+    intent.priority_order = _topological_order(intent.priority_edges, intent.classes)
+
+
 def extract_intent(prompt_text: str) -> SchedulingIntent:
     """Extract the small supported scheduling language before synthesis."""
     text = " ".join(prompt_text.strip().split())
@@ -113,18 +173,18 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
 
     priority_patterns = [
         r"(?:priorit(?:ize|ise)|prefer|favor|favour)\s+(?P<high>.+?)\s+(?:over|above|ahead of)\s+(?P<low>.+?)(?=\s+and\s+(?:priorit|give|make|let)|;|\.|$)",
-        r"(?P<high>[^,.]+?)\s+(?:has|have)\s+(?:strict\s+)?higher\s+priority\s+than\s+(?P<low>[^,.]+)",
+        r"(?P<high>[^,.;]+?)\s+(?:has|have)\s+(?:strict\s+)?higher\s+priority\s+than\s+(?P<low>[^,.;]+?)(?=\s+and\s+[^,.;]+?\s+(?:has|have)\s+(?:strict\s+)?higher\s+priority\s+than|[,.;]|$)",
     ]
     for pattern in priority_patterns:
         for match in re.finditer(pattern, lower):
             high, low = _class_in_phrase(match.group("high")), _class_in_phrase(match.group("low"))
             if high and low:
-                _add_order(intent.priority_order, high, low, intent.conflicts, "priority")
+                _add_priority_relation(intent, high, low)
     for match in re.finditer(r"(?:priorit(?:ize|ise)|prefer|favor|favour)\s+(?P<high>[^,.]+?)(?:\s+and\b|[,.;]|$)", lower):
         high = _class_in_phrase(match.group("high"))
         others = [name for name in intent.classes if name != high]
         if high and len(others) == 1:
-            _add_order(intent.priority_order, high, others[0], intent.conflicts, "priority")
+            _add_priority_relation(intent, high, others[0])
 
     for match in re.finditer(r"(?P<name>[\w -]+?)\s+(?:at\s+)?priority\s+(?P<value>\d+)", lower):
         name = _class_in_phrase(match.group("name"))
@@ -132,8 +192,6 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
             value = int(match.group("value"))
             if value > 7:
                 intent.unsupported.append(f"Priority {value} for {name} is outside the DSL range 0..7.")
-            if value in intent.priority_values.values() and intent.priority_values.get(name) != value:
-                intent.conflicts.append(f"Classes request the same explicit priority {value}.")
             intent.priority_values[name] = value
 
     quantum_patterns = [
@@ -224,7 +282,7 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
             intent.unsupported.append("No actionable scheduling requirement was detected.")
         else:
             intent.unsupported.append("No supported workload class was identified.")
-    if intent.classes and not (intent.priority_order or intent.quantum_order or intent.quantum_values or
+    if intent.classes and not (intent.priority_order or intent.priority_values or intent.quantum_order or intent.quantum_values or
                                intent.aging_values or intent.wait_requirements or intent.min_share_requirements):
         intent.unsupported.append("Workload names were found, but no supported scheduling requirement was specified.")
     return intent

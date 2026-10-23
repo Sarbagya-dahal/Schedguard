@@ -43,3 +43,28 @@ def test_contradictory_priority_remains_rejected():
     result = generate_by_rules("Prioritize web over batch and batch over web.")
     assert result.status == "UNSUPPORTED_INTENT"
     assert result.source_code == ""
+
+
+def test_conjunctive_priority_cycle_is_rejected_before_policy_generation():
+    result = generate_by_rules(
+        "Web has higher priority than batch and batch has higher priority than web."
+    )
+    assert result.status == "UNSUPPORTED_INTENT"
+    assert result.source_code == ""
+    assert result.intent["conflicts"]
+
+
+def test_three_class_priority_cycle_is_rejected_before_policy_generation():
+    result = generate_by_rules(
+        "Web has higher priority than batch; batch has higher priority than real-time; "
+        "real-time has higher priority than web."
+    )
+    assert result.status == "UNSUPPORTED_INTENT"
+    assert result.intent["conflicts"]
+
+
+def test_explicit_equal_priority_is_valid_equal_tier_semantics():
+    result = generate_by_rules("Web priority 0 and batch priority 0.")
+    assert result.proposal_status == "PROPOSAL_GENERATED"
+    assert result.intent["conflicts"] == []
+    assert "prio 0;" in result.source_code
