@@ -39,13 +39,27 @@ app = FastAPI(
 )
 logger = logging.getLogger(__name__)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+def cors_origins(raw_origins: Optional[str] = None) -> list[str]:
+    """Return explicitly configured cross-origin callers for this local Studio.
+
+    The browser UI is served by this application, so it needs no CORS policy by
+    default. A deployment that deliberately splits UI and API origins must opt
+    in with a comma-separated ``SCHEDGUARD_ALLOWED_ORIGINS`` value.
+    """
+    raw = os.environ.get("SCHEDGUARD_ALLOWED_ORIGINS", "") if raw_origins is None else raw_origins
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+_cors_origins = cors_origins()
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+    )
 
 
 @app.exception_handler(Exception)
@@ -845,50 +859,50 @@ def api_metrics():
 
 @app.get("/api/progress")
 def api_progress():
-    """Returns effort-weighted roadmap progress breakdown and component readiness."""
+    """Returns implementation status without treating unrun kernel work as complete."""
     return {
-        "overall_completion_pct": 25,
-        "status_statement": "Approximately 25% complete — effort-weighted project estimate.",
+        "overall_completion_pct": None,
+        "status_statement": "Core research features are implemented; Linux sched_ext runtime evidence is not run.",
         "phases": [
             {
                 "phase": 1,
                 "title": "Foundation + Feature 1",
                 "weight_pct": 25,
                 "status": "COMPLETED",
-                "scope": "PolicyLang compiler, safety pass, fixed-size IR, Z3 verifier, discrete-event simulator with replay, AI guarantee schema gate, offline rule baseline, 28 tests passing.",
-                "verified_exit_criteria": "28 tests pass; 0 bound violations across 2000 trials; 0 false accepts.",
+                "scope": "PolicyLang compiler, safety pass, fixed-size IR, Z3 verifier, discrete-event simulator with replay, AI guarantee schema gate, and offline rule baseline.",
+                "verified_exit_criteria": "Regression suite and documented simulator soundness experiment are available; see experiment provenance.",
             },
             {
                 "phase": "1b",
                 "title": "Rule-vs-LLM Inference Harness",
                 "weight_pct": 5,
-                "status": "PARTIAL",
+                "status": "IMPLEMENTED_LIVE_NOT_RUN",
                 "scope": "Evaluation harness comparing rule table baseline vs real LLM across 12+ intents with variance analysis.",
-                "verified_exit_criteria": "Harness implemented; live runs require ANTHROPIC_API_KEY.",
+                "verified_exit_criteria": "Harness and offline baseline are implemented; a live-provider evaluation requires explicit credentials and opt-in.",
             },
             {
                 "phase": 2,
                 "title": "Feature 2: Adversarial Workloads",
                 "weight_pct": 25,
-                "status": "PLANNED",
-                "scope": "Simulator v2 for bursty/blocking tasks, random + hill-climbing attackers, LLM structured attacker, counterfactual gate.",
-                "verified_exit_criteria": "Catches >= X% planted regressions before deployment.",
+                "status": "COMPLETED",
+                "scope": "Simulator v2 for bursty/blocking tasks, random + hill-climbing attackers, structured attacker interface, and counterfactual gate.",
+                "verified_exit_criteria": "Implemented and evaluated with recorded offline experiment artifacts; live LLM runs are separately labelled.",
             },
             {
                 "phase": 3,
                 "title": "Feature 3: Violation Explanation & Repair",
                 "weight_pct": 20,
-                "status": "PLANNED",
-                "scope": "Cause taxonomy for counterexamples, policy synthesis repair loop, comparative baselines.",
-                "verified_exit_criteria": "Iterations-to-verified within budget on 30 broken policies.",
+                "status": "COMPLETED",
+                "scope": "Cause taxonomy for counterexamples, bounded repair loop, synthesis integration, and comparative offline baselines.",
+                "verified_exit_criteria": "Implemented with a benchmark corpus; live-provider results remain opt-in and distinct from offline results.",
             },
             {
                 "phase": 4,
                 "title": "Feature 4: sched_ext Backend & Error Predictor",
                 "weight_pct": 25,
-                "status": "IN_PROGRESS_SKELETON",
-                "scope": "eBPF C emitter skeleton implemented. Full kernel loading in Linux 6.12 VM, BPF timer aging hook, telemetry maps, learned sim-vs-real error predictor.",
-                "verified_exit_criteria": "End-to-end kernel deployment with watchdog rollback.",
+                "status": "EXPERIMENTAL_NOT_RUN",
+                "scope": "Bounded C emission, build/preflight interfaces, lifecycle/watchdog state, real-trace schema, predictor interface, and conservative gate integration.",
+                "verified_exit_criteria": "Not run: Linux 6.12+ VM compilation, load, telemetry, and learned-predictor validation require explicitly authorized real-kernel evidence.",
             },
         ],
         "components": [
@@ -900,12 +914,12 @@ def api_progress():
             {"name": "Counterexample Replay Engine", "status": "Implemented & Tested", "color": "emerald"},
             {"name": "AI Property Schema Gate", "status": "Implemented & Tested", "color": "emerald"},
             {"name": "Adaptive Parameter Range Tuner", "status": "Implemented & Tested", "color": "emerald"},
-            {"name": "eBPF sched_ext C Emitter", "status": "Partially Implemented (Skeleton)", "color": "amber"},
-            {"name": "Multi-Intent LLM Evaluation (1b)", "status": "Partially Implemented", "color": "amber"},
-            {"name": "Adversarial Workload Generator", "status": "Planned (Phase 2)", "color": "slate"},
-            {"name": "Policy Synthesis & Repair Agent", "status": "Planned (Phase 3)", "color": "slate"},
-            {"name": "Linux Kernel sched_ext Live Loader", "status": "Planned (Phase 4)", "color": "slate"},
-            {"name": "Learned Simulator Error Predictor", "status": "Planned (Phase 4)", "color": "slate"},
+            {"name": "eBPF sched_ext C Emitter", "status": "Experimental; emission only", "color": "amber"},
+            {"name": "Multi-Intent LLM Evaluation (1b)", "status": "Implemented; live calls not run", "color": "amber"},
+            {"name": "Adversarial Workload Generator", "status": "Implemented & Tested", "color": "emerald"},
+            {"name": "Policy Synthesis & Repair Agent", "status": "Implemented & Tested", "color": "emerald"},
+            {"name": "Linux Kernel sched_ext Live Loader", "status": "Not run; explicit Linux VM workflow", "color": "slate"},
+            {"name": "Learned Simulator Error Predictor", "status": "Not run; no paired real traces", "color": "slate"},
         ],
     }
 

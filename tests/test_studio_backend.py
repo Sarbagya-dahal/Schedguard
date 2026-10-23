@@ -112,7 +112,9 @@ def test_api_endpoints_compile_check_simulate(client):
     # 7. Progress & Metrics
     r = client.get("/api/progress")
     assert r.status_code == 200
-    assert r.json()["overall_completion_pct"] == 25
+    progress = r.json()
+    assert progress["overall_completion_pct"] is None
+    assert "not run" in progress["status_statement"].lower()
 
 
 def test_run_snapshot_and_pdf_generation(client):

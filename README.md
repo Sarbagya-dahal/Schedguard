@@ -1,8 +1,13 @@
-# SchedGuard (Phase 1 prototype)
+# SchedGuard Research Workbench
 
 Guarantee-carrying scheduling policies: a small policy DSL (**PolicyLang**) compiled to a fixed-size IR,
 checked by a **safety pass** and a **Z3-based property verifier**, replayed in a **simulator**, with an
 **AI proposer for formal guarantees** whose output is schema-gated and then proved or refuted.
+
+The compiler, verifier, simulator, adversarial gate, and bounded repair workflows are implemented research
+components. They are not evidence that a Linux scheduler has compiled or loaded: the Phase 4 `sched_ext`
+emitter is inspection/emission support only until an explicitly authorized Linux 6.12+ VM produces build,
+load, and telemetry evidence. The Studio and CLI never load a kernel scheduler by default.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -39,6 +44,13 @@ python experiments/run_phase4_metrics.py              # explicit NOT_RUN until r
   ```
 - **Offline Mode**:
   If no API keys are set, `--provider stub` and the rule-table baseline work fully offline with zero external network access. All responses are strictly validated through `schema.validate` before reaching the Z3 verifier.
+
+### Local Studio API
+
+The Studio is served from the same local application origin. Cross-origin API use is disabled by default; a
+deliberate split UI/API deployment must set `SCHEDGUARD_ALLOWED_ORIGINS` to a comma-separated allowlist.
+This local research server has no authentication or multi-tenant authorization boundary, so do not expose it
+directly to an untrusted network.
 
 Read `AGENTS.md` first (architecture, invariants, next steps) and `docs/MODEL.md` (formal model).
 Phase 4 backend stages and their real-kernel limitations are documented in

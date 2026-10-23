@@ -48,7 +48,7 @@ schedguard/
 │   └── cli.py                 subcommands: ir | check | analyze | simulate | infer | attack | gate
 ├── examples/*.sched           balanced, strict_starves, aging_fix, three_tier, invalid_ranges
 ├── workloads/*.json  intents/*.json (13 intents)  traces/*.json (4 recorded traces)
-├── tests/                     71 tests (frontend, verifier, simulator v2, space, attackers, gate, eval)
+├── tests/                     regression coverage for frontend, verifier, simulator v2, space, attackers, gate, eval
 └── experiments/
     ├── soundness.py           bound-vs-simulator differential test
     ├── eval_inference.py      Phase 1b rule-vs-LLM evaluation harness
@@ -94,11 +94,11 @@ python experiments/run_phase2_metrics.py
       LLM on >= 12 intents in `intents/` (includes untagged/novel class names, prompt injection).
       Metrics: classes covered, schema-reject rate, verified/violated/unknown rates, distance to provable frontier
       (proposed bound / tightest bound). Supports OpenRouter and Anthropic with offline fallback.
-      53 tests total passing.
+      Live-provider evaluation is opt-in; offline outputs are never reported as LLM performance.
 - [x] **Phase 2 (Feature 2):** Simulator v2 (bursts/sleeps, event queue, dispatch latency percentiles),
       bounded parameter space, regression & scope-violation objectives, Random / HillClimb / LLM attackers,
       pre-deployment regression gate (`gate.py`), planted-regression benchmark suite (`planted_regressions.py`),
-      multi-seed metrics runner (`run_phase2_metrics.py`), CLI `attack` & `gate`. 71 tests passing.
+      multi-seed metrics runner (`run_phase2_metrics.py`), CLI `attack` & `gate`.
 - [x] Phase 3 (Feature 3): violation classification, bounded repair loop, synthesis integration, and benchmark corpus
 - [~] Phase 4 scaffolding: bounded sched_ext emitter, build/preflight API, lifecycle/watchdog state, real-trace schema, predictor interface, conservative gate integration, and NOT_RUN evaluation report. Linux 6.12+ VM compilation/load/telemetry and learned-model validation remain unrun.
 
