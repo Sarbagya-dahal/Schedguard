@@ -60,6 +60,11 @@
           <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           <span class="nav-label">Code Explorer</span>
         </button>
+
+        <button class="nav-item" data-view="view-phase4">
+          <span class="nav-icon nav-text-icon">⌁</span>
+          <span class="nav-label">Backend &amp; Runtime</span>
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -144,6 +149,18 @@
 
       <section id="view-experiments" class="view-panel hidden">
         <div class="section-container phase3-page"><div class="section-header-bar"><div><h2 class="section-heading">Experiment Results</h2><p class="section-subheading">Recorded observations only. Missing or skipped conditions remain explicit.</p></div><button id="refreshMetricsBtn" class="btn btn-secondary">Refresh</button></div><div id="metricsStatus" class="phase3-status">Loading recorded results…</div><div id="metricsSummary" class="phase3-metrics-grid"></div><div class="card"><h3 class="card-title">Per-condition results</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>Condition</th><th>Status</th><th>Policies</th><th>Success</th><th>Failure</th><th>Mean iterations</th><th>Cause accuracy</th></tr></thead><tbody id="metricsBody"><tr><td colspan="7" class="empty-cell">No metrics loaded.</td></tr></tbody></table></div></div></div>
+      </section>
+
+      <section id="view-phase4" class="view-panel hidden">
+        <div class="section-container phase4-page">
+          <div class="section-header-bar"><div><h2 class="section-heading">Backend &amp; Runtime</h2><p class="section-subheading">Inspect the generated sched_ext backend and its real execution prerequisites. Kernel loading is never triggered here.</p></div><span class="badge badge-amber">VM load: NOT RUN</span></div>
+          <div class="phase4-grid">
+            <div class="card phase4-card"><div class="phase4-card-header"><h3 class="card-title">Read-only preflight</h3><span class="phase4-stage">Inspection</span></div><p class="text-muted">Checks the current host, kernel capability, clang, vmlinux.h, and libbpf sched_ext headers.</p><button id="phase4PreflightBtn" class="btn btn-secondary">Run preflight</button><pre id="phase4PreflightOutput" class="code-output">No preflight run yet.</pre></div>
+            <div class="card phase4-card"><div class="phase4-card-header"><h3 class="card-title">Emit from current policy</h3><span class="phase4-stage">Source only</span></div><p class="text-muted">Uses the real compiler API and emits bounded C with IR-to-C mappings.</p><button id="phase4EmitBtn" class="btn btn-primary">Generate sched_ext C</button><div id="phase4EmitStatus" class="phase3-status">Ready.</div></div>
+          </div>
+          <div class="card"><div class="phase4-card-header"><h3 class="card-title">Generated C</h3><span id="phase4CodeStatus" class="badge badge-neutral">NOT RUN</span></div><pre id="phase4CodeOutput" class="code-output">Generate source to inspect the current backend output.</pre></div>
+          <div class="card"><div class="phase4-card-header"><h3 class="card-title">Lifecycle and telemetry</h3><span class="badge badge-amber">NOT RUN</span></div><p id="phase4LifecycleNote" class="text-muted">The default lifecycle is inspection-only. Real load, health monitoring, fallback, and telemetry collection require an explicitly authorized Linux 6.12+ disposable VM.</p></div>
+        </div>
       </section>
 
       <!-- ============================================================== -->

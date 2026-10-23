@@ -122,6 +122,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDemonstrationModal();
   initCodeExplorer();
   initPhase3Workbench();
+  initPhase4Workbench();
 
   // Load examples & recent runs
   await loadExamples();
@@ -131,6 +132,47 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Load default policy example into editor
   await loadExample("aging_fix");
 });
+
+function initPhase4Workbench() {
+  const preflightBtn = document.getElementById("phase4PreflightBtn");
+  const emitBtn = document.getElementById("phase4EmitBtn");
+  if (preflightBtn) preflightBtn.addEventListener("click", loadPhase4Preflight);
+  if (emitBtn) emitBtn.addEventListener("click", emitPhase4Source);
+}
+
+async function loadPhase4Preflight() {
+  const output = document.getElementById("phase4PreflightOutput");
+  if (!output) return;
+  output.textContent = "Checking…";
+  try {
+    const res = await fetch("/api/phase4/preflight");
+    const data = await res.json();
+    output.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    output.textContent = `Preflight failed: ${err.message}`;
+  }
+}
+
+async function emitPhase4Source() {
+  const source = document.getElementById("mainCodeEditor")?.value?.trim();
+  const output = document.getElementById("phase4CodeOutput");
+  const status = document.getElementById("phase4EmitStatus");
+  const badge = document.getElementById("phase4CodeStatus");
+  if (!source || !output) return;
+  output.textContent = "Generating…";
+  try {
+    const res = await fetch("/api/codegen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `API returned ${res.status}`);
+    output.textContent = data.c_code || "No source emitted.";
+    if (status) status.textContent = `${data.status_label || "EMISSION_SUCCEEDED"}. Build and load are separate stages.`;
+    if (badge) { badge.textContent = data.status_label || "EMISSION_SUCCEEDED"; badge.className = "badge badge-green"; }
+  } catch (err) {
+    output.textContent = `Emission failed: ${err.message}`;
+    if (status) status.textContent = "Emission failed; no runtime action was attempted.";
+    if (badge) { badge.textContent = "FAILED"; badge.className = "badge badge-red"; }
+  }
+}
 
 // ============================================================================
 // 1. Theme & Sidebar Management
