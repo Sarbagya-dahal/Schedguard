@@ -19,7 +19,7 @@ async function apiErrorMessage(response) {
   let payload = null;
   try { payload = await response.json(); } catch (_) { /* non-JSON proxy response */ }
   const error = payload?.error;
-  if (error?.message) {
+  if (error && typeof error === "object" && error.message) {
     const context = [
       error.provider ? `provider ${error.provider}` : "",
       error.category ? `category ${error.category}` : "",
@@ -29,7 +29,7 @@ async function apiErrorMessage(response) {
     const reference = error.correlation_id ? ` (reference ${error.correlation_id})` : "";
     return `${error.operation || "Request"}: ${error.message}${context ? ` [${context}]` : ""}${reference}`;
   }
-  return payload?.detail || payload?.message || `HTTP ${response.status}`;
+  return payload?.detail || payload?.message || (typeof payload?.error === "string" ? payload.error : "") || `HTTP ${response.status}`;
 }
 
 // Preset Natural Language Intent Prompts
@@ -176,8 +176,8 @@ async function buildPhase4Source() {
       scx_header: document.getElementById("phase4ScxInput")?.value?.trim() || null,
     };
     const res = await fetch("/api/phase4/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(await apiErrorMessage(res));
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `API returned ${res.status}`);
     if (output) output.textContent = JSON.stringify(data, null, 2);
     if (status) status.textContent = `${data.status || "NOT_RUN"}. Kernel loading remains a separate authorized step.`;
   } catch (err) {
@@ -208,8 +208,8 @@ async function emitPhase4Source() {
   output.textContent = "Generating…";
   try {
     const res = await fetch("/api/codegen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source }) });
+    if (!res.ok) throw new Error(await apiErrorMessage(res));
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `API returned ${res.status}`);
     output.textContent = data.c_code || "No source emitted.";
     if (status) status.textContent = `${data.status_label || "EMISSION_SUCCEEDED"}. Build and load are separate stages.`;
     if (badge) { badge.textContent = data.status_label || "EMISSION_SUCCEEDED"; badge.className = "badge badge-green"; }
@@ -331,11 +331,11 @@ function phase3Copy(text, button) {
 }
 
 async function phase3ResponseJson(response) {
+  if (!response.ok) throw new Error(await apiErrorMessage(response));
   const text = await response.text();
   let data;
   try { data = text ? JSON.parse(text) : {}; }
   catch (_) { throw new Error(`Request failed (${response.status}); server returned a non-JSON response.`); }
-  if (!response.ok) throw new Error(data.detail || data.message || data.error || `Request failed (${response.status}).`);
   return data;
 }
 
@@ -885,7 +885,7 @@ async function handleAiGeneratePolicy() {
       body: JSON.stringify({ prompt: promptText, provider: provider }),
     });
 
-    if (!res.ok) throw new Error(`API returned ${res.status}`);
+    if (!res.ok) throw new Error(await apiErrorMessage(res));
     const data = await res.json();
     const usable = (data.proposal_status === "PROPOSAL_GENERATED" || data.status === "PROPOSAL_GENERATED" || data.status === "UNTRUSTED_PROPOSAL") &&
       data.consistency_status === "MATCH" && Boolean(data.source_code);
@@ -1562,7 +1562,7 @@ async function loadRecentRuns() {
 window.loadHistoricalRun = async function(runId) {
   try {
     const res = await fetch(`/api/run/${runId}`);
-    if (!res.ok) throw new Error(`API returned ${res.status}`);
+    if (!res.ok) throw new Error(await apiErrorMessage(res));
     const runRecord = await res.json();
 
     // Load source into editor
