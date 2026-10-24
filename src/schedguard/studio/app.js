@@ -12,7 +12,7 @@ const appState = {
   pendingAiPolicy: null,
   examples: {},
   tourStep: 1,
-  activeView: "view-overview",
+  activeView: "view-home",
 };
 
 async function apiErrorMessage(response) {

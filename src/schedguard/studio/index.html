@@ -28,7 +28,12 @@
       </div>
 
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-view="view-overview">
+        <button class="nav-item active" data-view="view-home">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>
+          <span class="nav-label">Home</span>
+        </button>
+
+        <button class="nav-item" data-view="view-overview">
           <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           <span class="nav-label">Research Overview</span>
         </button>
@@ -86,9 +91,69 @@
     <div class="workbench-main">
 
       <!-- ============================================================== -->
-      <!-- VIEW 1: RESEARCH OVERVIEW (LANDING PAGE) -->
+      <!-- VIEW 1: HOME -->
+      <section id="view-home" class="view-panel active">
+        <div class="home-page">
+          <header class="home-hero">
+            <div class="home-kicker">SCHEDGUARD / RESEARCH WORKBENCH</div>
+            <h1 class="home-title">Design. Verify. Refine.</h1>
+            <p class="home-lede">Build scheduling policies, examine their formal properties, and generate sched_ext source for policies supported by the backend.</p>
+            <div class="home-actions">
+              <button class="btn btn-primary btn-lg" onclick="switchView('view-editor')">Open Policy Editor <span aria-hidden="true">&rarr;</span></button>
+              <button class="btn btn-secondary btn-lg" onclick="switchView('view-verification')">Explore Formal Guarantees</button>
+            </div>
+          </header>
+
+          <section class="home-workflow" aria-labelledby="home-workflow-title">
+            <div class="home-section-heading">
+              <span class="home-eyebrow">A focused workflow</span>
+              <h2 id="home-workflow-title">From policy idea to evidence</h2>
+              <p>Use the tools in sequence, while keeping formal model results separate from runtime implementation limits.</p>
+            </div>
+            <div class="home-workflow-grid">
+              <button class="home-workflow-card" onclick="switchView('view-editor')">
+                <span class="home-step">01</span>
+                <span class="home-card-title">Define</span>
+                <span class="home-card-copy">Write and validate a bounded PolicyLang scheduling policy.</span>
+                <span class="home-card-link">Open editor <span aria-hidden="true">&rarr;</span></span>
+              </button>
+              <button class="home-workflow-card" onclick="switchView('view-verification')">
+                <span class="home-step">02</span>
+                <span class="home-card-title">Verify</span>
+                <span class="home-card-copy">Check formal properties, inspect assumptions, and investigate counterexamples.</span>
+                <span class="home-card-link">View guarantees <span aria-hidden="true">&rarr;</span></span>
+              </button>
+              <button class="home-workflow-card" onclick="switchView('view-phase4')">
+                <span class="home-step">03</span>
+                <span class="home-card-title">Generate</span>
+                <span class="home-card-copy">Generate sched_ext C only when the backend supports the requested semantics.</span>
+                <span class="home-card-link">Open emitter <span aria-hidden="true">&rarr;</span></span>
+              </button>
+            </div>
+          </section>
+
+          <section class="home-destinations" aria-labelledby="home-destinations-title">
+            <div class="home-section-heading compact">
+              <span class="home-eyebrow">Useful destinations</span>
+              <h2 id="home-destinations-title">Start where the question is</h2>
+            </div>
+            <div class="home-destination-list">
+              <button class="home-destination" onclick="switchView('view-editor')"><span class="destination-icon">&lt;/&gt;</span><span><strong>Policy Editor</strong><small>Author, compile, and inspect a policy.</small></span><span class="destination-arrow" aria-hidden="true">&rarr;</span></button>
+              <button class="home-destination" onclick="switchView('view-verification')"><span class="destination-icon">✓</span><span><strong>Formal Guarantees</strong><small>Separate verified, violated, and inconclusive results.</small></span><span class="destination-arrow" aria-hidden="true">&rarr;</span></button>
+              <button class="home-destination" onclick="switchView('view-simulator')"><span class="destination-icon">◫</span><span><strong>Workload Simulator</strong><small>Replay bounded workloads and inspect dispatch traces.</small></span><span class="destination-arrow" aria-hidden="true">&rarr;</span></button>
+            </div>
+          </section>
+
+          <aside class="home-boundary-note">
+            <strong>Keep the boundaries clear.</strong>
+            <span>Formal verification covers SchedGuard's supported mathematical model. It does not by itself prove Linux kernel loading, compilation, or real-world scheduling behavior.</span>
+          </aside>
+        </div>
+      </section>
+
+      <!-- VIEW 2: RESEARCH OVERVIEW -->
       <!-- ============================================================== -->
-      <section id="view-overview" class="view-panel active">
+      <section id="view-overview" class="view-panel hidden">
         <div class="overview-header">
           <div class="overview-title-block">
             <h1 class="page-title">SchedLang Research Studio</h1>

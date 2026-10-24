@@ -11,6 +11,21 @@ def test_sidebar_groups_author_evaluate_research_and_deploy_workflows():
         assert f">{label}<" in html
 
 
+def test_home_is_the_default_entry_point_and_links_to_real_views():
+    html = (STUDIO / "index.html").read_text(encoding="utf-8")
+    script = (STUDIO / "app.js").read_text(encoding="utf-8")
+    assert '<section id="view-home" class="view-panel active">' in html
+    assert '<section id="view-overview" class="view-panel hidden">' in html
+    assert 'data-view="view-home"' in html
+    assert "Design. Verify. Refine." in html
+    assert "Open Policy Editor" in html
+    assert "Explore Formal Guarantees" in html
+    assert "switchView('view-editor')" in html
+    assert "switchView('view-verification')" in html
+    assert "switchView('view-phase4')" in html
+    assert 'activeView: "view-home"' in script
+
+
 def test_studio_uses_structured_provider_error_message_and_keeps_run_actions_reachable():
     script = (STUDIO / "app.js").read_text(encoding="utf-8")
     css = (STUDIO / "app.css").read_text(encoding="utf-8")
