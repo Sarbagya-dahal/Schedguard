@@ -38,6 +38,26 @@ def test_studio_uses_structured_provider_error_message_and_keeps_run_actions_rea
     assert "#recentRunsTable td:last-child" in css
 
 
+def test_formal_guarantees_workspace_exposes_real_run_evidence_and_stale_state():
+    html = (STUDIO / "index.html").read_text(encoding="utf-8")
+    script = (STUDIO / "app.js").read_text(encoding="utf-8")
+    assert 'id="recheckVerifBtn"' in html
+    assert 'id="verifEditPolicyBtn"' in html
+    assert 'id="verificationCardsContainer"' in html
+    assert "No policy has been verified yet." in html
+    assert "executeCompileAndRun" in script
+    assert "renderVerificationStaleState" in script
+    assert "updateVerificationStaleness" in script
+    assert "runRecord.source_code" in script
+    assert "v.counterexample" in script
+    assert "v.replay" in script
+    assert "v.evidence" in script
+    assert "guarantee-evidence" in script
+    assert "Policy changed after this verification" in script
+    assert "Single-CPU" in html
+    assert "multi-CPU" in html
+
+
 def test_studio_api_error_message_behavior_under_node():
     import json
     import subprocess

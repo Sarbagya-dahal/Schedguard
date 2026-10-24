@@ -551,6 +551,7 @@ function initEditor() {
       setEditorPolicyState("Custom policy — unsaved", true);
       updateLineNumbers();
       updateAstStaleness();
+      updateVerificationStaleness();
     });
 
     // Keyboard shortcut Ctrl+Enter to compile
@@ -637,6 +638,11 @@ function initEditor() {
   // Verification Recheck button
   const recheckBtn = document.getElementById("recheckVerifBtn");
   if (recheckBtn) recheckBtn.addEventListener("click", executeCompileAndRun);
+  const editPolicyBtn = document.getElementById("verifEditPolicyBtn");
+  if (editPolicyBtn) editPolicyBtn.addEventListener("click", () => {
+    switchView("view-editor");
+    document.getElementById("mainCodeEditor")?.focus();
+  });
 
   // Overview history refresh button
   const refreshRunsBtn = document.getElementById("refreshRunsBtn");
@@ -699,9 +705,11 @@ async function executeCompileAndRun() {
 
   const statusText = document.getElementById("editorStatusText");
   const compileBtn = document.getElementById("editorCompileBtn");
+  const recheckBtn = document.getElementById("recheckVerifBtn");
 
   if (statusText) statusText.textContent = "Compiling & executing Z3 analysis...";
   if (compileBtn) compileBtn.disabled = true;
+  if (recheckBtn) recheckBtn.disabled = true;
 
   // Reset stage chips to pending
   setStageChip("stgLexer", "pending");
@@ -724,6 +732,7 @@ async function executeCompileAndRun() {
     console.error("Run request failed:", err);
     if (statusText) statusText.textContent = "Unable to execute compilation request.";
     if (compileBtn) compileBtn.disabled = false;
+    if (recheckBtn) recheckBtn.disabled = false;
     return;
   }
 
@@ -745,6 +754,7 @@ async function executeCompileAndRun() {
     if (statusText) statusText.textContent = "Run completed, but results could not be rendered.";
   } finally {
     if (compileBtn) compileBtn.disabled = false;
+    if (recheckBtn) recheckBtn.disabled = false;
   }
 }
 
@@ -1160,6 +1170,12 @@ function renderVerificationView(runRecord) {
 
   if (!banner || !badge || !title || !desc || !cardsContainer || !factsBody) return;
 
+  const currentSource = document.getElementById("mainCodeEditor")?.value || "";
+  if ((runRecord?.source_code || "") !== currentSource) {
+    renderVerificationStaleState(runRecord);
+    return;
+  }
+
   const verif = runRecord.check || {};
   const verdicts = verif.verdicts || [];
   const aggregate = verif.aggregate || { status: verdicts.length ? "NOT_RUN" : "NO_GUARANTEES", summary: "" };
@@ -1222,8 +1238,8 @@ function renderVerificationView(runRecord) {
   cardsContainer.innerHTML = "";
   if (verdicts.length === 0) {
     cardsContainer.innerHTML = aggregate.status === "NO_GUARANTEES"
-      ? '<div class="empty-state-box">Policy declares no formal guarantees. Add <code>guarantee no_starvation</code> or <code>guarantee min_share</code> in the editor.</div>'
-      : '<div class="empty-state-box">Guarantee results are not available for this run.</div>';
+      ? '<div class="empty-state-box verification-empty-state"><strong> No formal guarantees declared.</strong><span>Add <code>guarantee no_starvation</code> or <code>guarantee min_share</code> in the editor, then re-run verification.</span><button class="btn btn-secondary btn-sm" onclick="switchView(\'view-editor\')">Edit Policy &rarr;</button></div>'
+      : '<div class="empty-state-box verification-empty-state"><strong>Guarantee results are not available.</strong><span>The run did not produce verifier evidence. Re-run the current policy after resolving any compilation or analysis issue.</span><button class="btn btn-secondary btn-sm" onclick="executeCompileAndRun()">Run Verification</button></div>';
   } else {
     const irClasses = runRecord.compile?.ir?.classes || [];
     const maxTasks = runRecord.compile?.ir?.max_tasks || 8;
@@ -1306,6 +1322,7 @@ function renderVerificationView(runRecord) {
         replayHtml = `<div class="replay-evidence"><strong>Discrete Simulator Replay:</strong> ${escapeHtml(v.replay)}</div>`;
       }
 
+      const evidenceSummary = v.status === "VIOLATED" ? "Inspect counterexample and replay evidence" : (v.status === "UNKNOWN" ? "Inspect diagnostic and model limitation" : "Inspect proof details and model parameters");
       card.innerHTML = `
         <div class="card-header-clean flex-between">
           <div>
@@ -1318,10 +1335,16 @@ function renderVerificationView(runRecord) {
           </div>
         </div>
         <p class="guarantee-plain-desc">${plainDesc}</p>
-        ${mathFormulaHtml}
-        ${solverOutcomeHtml}
-        ${counterexampleHtml}
-        ${replayHtml}
+        <details class="guarantee-evidence"${v.status === "VIOLATED" ? " open" : ""}>
+          <summary>${evidenceSummary}</summary>
+          <div class="guarantee-evidence-body">
+            ${mathFormulaHtml}
+            ${solverOutcomeHtml}
+            ${counterexampleHtml}
+            ${replayHtml}
+            <div class="evidence-meta">Evidence type: <code>${escapeHtml(v.evidence || "none")}</code></div>
+          </div>
+        </details>
         <div class="evidence-link">Evidence Run: <code>${escapeHtml(runRecord.run_id || "current")}</code> (${escapeHtml(runRecord.policy_name || "editor")})</div>
       `;
       cardsContainer.appendChild(card);
@@ -1349,6 +1372,34 @@ function renderVerificationView(runRecord) {
       `;
       factsBody.appendChild(tr);
     }
+  }
+}
+
+function renderVerificationStaleState(runRecord) {
+  const banner = document.getElementById("overallVerdictBanner");
+  const badge = document.getElementById("verdictBadgeText");
+  const title = document.getElementById("verdictBannerTitle");
+  const desc = document.getElementById("verdictBannerDesc");
+  const cards = document.getElementById("verificationCardsContainer");
+  const facts = document.getElementById("provableFactsBody");
+  if (!banner || !badge || !title || !desc || !cards || !facts) return;
+  banner.className = "verdict-banner-card stale";
+  badge.textContent = "STALE";
+  title.textContent = "Policy changed after this verification";
+  desc.textContent = `Run ${runRecord?.run_id || "the previous run"} belongs to an older source version. Re-verify before using these results.`;
+  cards.innerHTML = '<div class="empty-state-box verification-empty-state"><strong>Results are out of date.</strong><span>The editor source no longer matches the policy that produced the displayed evidence.</span><button class="btn btn-primary btn-sm" onclick="executeCompileAndRun()">Re-verify Current Policy</button></div>';
+  facts.innerHTML = '<tr><td colspan="6" class="empty-cell">Facts hidden until the current policy is verified.</td></tr>';
+  const pdf = document.getElementById("verifDownloadPdfBtn");
+  if (pdf) pdf.disabled = true;
+}
+
+function updateVerificationStaleness() {
+  if (!appState.currentRunRecord) return;
+  const current = document.getElementById("mainCodeEditor")?.value || "";
+  if ((appState.currentRunRecord.source_code || "") !== current) {
+    renderVerificationStaleState(appState.currentRunRecord);
+  } else {
+    renderVerificationView(appState.currentRunRecord);
   }
 }
 

@@ -395,6 +395,7 @@
               </p>
             </div>
             <div class="section-actions">
+              <button id="verifEditPolicyBtn" class="btn btn-secondary btn-sm">Edit Current Policy</button>
               <button id="verifDownloadPdfBtn" class="btn btn-secondary btn-sm" disabled>Download PDF Report</button>
               <button id="recheckVerifBtn" class="btn btn-primary btn-sm">Re-verify Guarantees</button>
             </div>
@@ -410,7 +411,8 @@
                 where <code class="math-inline">H = &sum;(prio<sub>j</sub> &lt; prio<sub>i</sub>) n<sub>j</sub>Q<sub>j</sub></code>,
                 <code class="math-inline">BA = &sum;(aging<sub>j</sub>, prio<sub>j</sub> &ge; prio<sub>i</sub>) n<sub>j</sub>Q<sub>j</sub> &minus; Q<sub>i</sub></code>.
                 Starvation (W<sub>i</sub> = &infin;) if higher tiers exist without aging on class i.<br>
-              3. <strong>Kernel Distinction:</strong> This verifier checks scheduling-level properties. It is <em>not</em> the Linux in-kernel eBPF register/memory safety verifier.
+              3. <strong>Scope:</strong> The formal model is single-CPU and CPU-bound; blocking, task arrivals, and multi-CPU execution are outside its scope.<br>
+              4. <strong>Kernel Distinction:</strong> This verifier checks scheduling-level properties. It is <em>not</em> the Linux in-kernel eBPF register/memory safety verifier.
             </p>
           </div>
 
@@ -427,7 +429,7 @@
           <div class="subsection-block">
             <h3 class="subsection-title">Evaluated Guarantees</h3>
             <div id="verificationCardsContainer" class="guarantee-cards-stack">
-              <div class="empty-state-box">Compile a policy declaring guarantees to inspect proof outcomes.</div>
+              <div class="empty-state-box verification-empty-state"><strong>No policy has been verified yet.</strong><span>Open the Policy Editor, compile a policy, and return here to inspect the actual verifier result.</span><button class="btn btn-secondary btn-sm" onclick="switchView('view-editor')">Open Policy Editor &rarr;</button></div>
             </div>
           </div>
 
