@@ -38,10 +38,17 @@ class Verdict:
     elapsed_ms: float = 0.0
 
     def to_dict(self):
-        return {"guarantee": self.guarantee.pretty(), "status": self.status,
-                "counterexample": self.counterexample, "replay": self.replay,
-                "evidence": self.evidence,
-                "elapsed_ms": round(self.elapsed_ms, 2)}
+        return {
+            "guarantee": self.guarantee.pretty(),
+            "kind": getattr(self.guarantee, "kind", ""),
+            "class_name": getattr(self.guarantee, "cls_name", ""),
+            "value": getattr(self.guarantee, "value", 0),
+            "status": self.status,
+            "counterexample": self.counterexample,
+            "replay": self.replay,
+            "evidence": self.evidence,
+            "elapsed_ms": round(self.elapsed_ms, 2),
+        }
 
 
 def _vars_and_domain(ir: IRPolicy, i: int):

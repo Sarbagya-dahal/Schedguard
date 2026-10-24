@@ -82,9 +82,9 @@ class OpenRouterProvider:
         if not api_key:
             raise ProviderConfigurationError("configuration", "OPENROUTER_API_KEY environment variable is required")
         self.api_key = api_key
-        m = model or os.environ.get("SCHEDGUARD_MODEL")
-        if not m:
-            raise ProviderConfigurationError("configuration", "SCHEDGUARD_MODEL environment variable or model argument is required")
+        # Default to the configured project model; fall back to recursive/flint-v1.0:free
+        # (the required OpenRouter model per Priority 2 spec).
+        m = model or os.environ.get("SCHEDGUARD_MODEL") or "recursive/flint-v1.0:free"
         self.model = m
         self.timeout = timeout
         self.max_retries = max_retries
@@ -104,6 +104,10 @@ class OpenRouterProvider:
                 {"role": "user", "content": p.user},
             ],
             "temperature": 0,
+            "stream": False,
+            # Flint spends substantial budget on hidden reasoning before emitting
+            # the short PolicyLang program; 1000 can end with content == null.
+            "max_tokens": 4096,
         }
         data = json.dumps(payload).encode("utf-8")
 

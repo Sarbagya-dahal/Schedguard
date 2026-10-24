@@ -5,6 +5,7 @@ import re
 from typing import Callable, Any
 
 from ..compiler import compile_source
+from ..dsl.lexer import DSLError
 from ..verify.properties import check_all, analyze, Verdict
 from .classify import classify_violation
 from .taxonomy import CauseTaxonomy
@@ -167,7 +168,10 @@ def repair_policy(source: str, *, feedback: str = "template",
     """Repair only through parse/safety/formal verification, bounded to five rounds."""
     max_iterations = min(MAX_ITERATIONS, max(0, max_iterations))
     current = source
-    first = compile_source(source)
+    try:
+        first = compile_source(source)
+    except DSLError as exc:
+        return RepairResult(False, source, [RepairIteration(0, "REJECTED", message=str(exc))])
     if not first.ok:
         return RepairResult(False, source, [RepairIteration(0, "REJECTED", message="initial policy failed compilation")])
     original = first.ir

@@ -458,8 +458,15 @@ def api_run(req: SourceRequest):
         sim_res = simulate(cres.ir, wl, horizon_ms=10000, record_trace=True, max_trace_events=800)
         sim_data = _sim_to_dict(sim_res, wl)
 
-        # eBPF C codegen snapshot
-        codegen_data = emit_ebpf_c(cres.ir).to_dict()
+        # eBPF C codegen snapshot. Unsupported runtime semantics are recorded
+        # in the run instead of turning an otherwise valid formal run into a
+        # misleading success or an unhandled server error.
+        try:
+            codegen_data = emit_ebpf_c(cres.ir).to_dict()
+        except ValueError as exc:
+            codegen_data = {"status": "UNSUPPORTED", "status_label": "UNSUPPORTED",
+                            "c_code": "", "limitations": [str(exc)],
+                            "unsupported_semantics": [str(exc)]}
 
     record = create_run_record(
         source_code=req.source,
@@ -719,7 +726,20 @@ def api_codegen(req: SourceRequest):
     if not res.ok or res.ir is None:
         raise HTTPException(status_code=400, detail="Cannot generate C: compilation errors exist")
 
-    cg_res = emit_ebpf_c(res.ir)
+    try:
+        cg_res = emit_ebpf_c(res.ir)
+    except ValueError as exc:
+        reason = str(exc)
+        return JSONResponse(status_code=400, content={
+            "c_code": "",
+            "policy_name": res.ir.name,
+            "is_complete": False,
+            "status": "UNSUPPORTED",
+            "status_label": "UNSUPPORTED",
+            "unsupported_semantics": [reason],
+            "limitations": [reason],
+            "detail": reason,
+        })
     return cg_res.to_dict()
 
 

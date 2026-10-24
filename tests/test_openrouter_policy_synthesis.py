@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from schedguard.cli import main
-from schedguard.inference.policy_gen import propose_policy
+from schedguard.inference.policy_gen import _extract_policy_source, propose_policy
 from schedguard.server import app
 
 
@@ -62,7 +62,7 @@ def test_openrouter_malformed_response_is_rejected_without_rule_fallback(respons
 
 
 def test_openrouter_api_error_is_structured_and_never_offline_falls_back():
-    secret = "sk-or-v1-test-secret"
+    secret = "test-openrouter-key"
     with patch.dict("os.environ", {"OPENROUTER_API_KEY": secret, "SCHEDGUARD_MODEL": "test/model"}, clear=True):
         with patch("schedguard.inference.policy_gen.OpenRouterProvider", _mock_provider(error=RuntimeError(f"HTTP 401 Bearer {secret}"))):
             result = propose_policy(PROMPT, provider_name="openrouter")
@@ -91,6 +91,68 @@ def test_openrouter_consistency_rejection_preserves_live_metadata():
     assert result.provider == "openrouter"
     assert result.proposal_status == "PROPOSAL_REJECTED"
     assert any("350ms" in e for e in result.consistency_errors)
+
+
+def test_policy_source_extraction_accepts_fences_and_surrounding_prose():
+    assert _extract_policy_source("Here is the policy:\n" + SOURCE + "\nThat is all.") == SOURCE
+    assert _extract_policy_source("```schedlang\n" + SOURCE + "\n```") == SOURCE
+    assert _extract_policy_source("   ") == ""
+
+
+def test_empty_live_output_is_rejected_without_success():
+    with patch("schedguard.inference.policy_gen.OpenRouterProvider", _mock_provider("")):
+        result = propose_policy(PROMPT, provider_name="openrouter")
+    assert result.is_live_llm is True
+    assert result.proposal_status == "PROPOSAL_REJECTED"
+    assert result.compilation_status == "NOT_RUN"
+    assert result.consistency_status == "NOT_RUN"
+    assert result.consistency_errors == ["Provider returned empty policy output."]
+
+
+def test_invalid_first_candidate_gets_one_same_provider_correction_attempt():
+    class SequenceProvider:
+        name = "openrouter"
+        model = "test/model"
+        calls = 0
+
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, prompt):
+            self.calls += 1
+            if self.calls == 1:
+                return "policy broken { > }"
+            assert "compiler_diagnostics" in prompt.user
+            return SOURCE
+
+    provider = SequenceProvider()
+    with patch("schedguard.inference.policy_gen.OpenRouterProvider", return_value=provider):
+        result = propose_policy(PROMPT, provider_name="openrouter")
+    assert provider.calls == 2
+    assert result.proposal_status == "PROPOSAL_GENERATED"
+    assert result.compilation_status == "COMPILATION_SUCCESS"
+    assert result.consistency_status == "MATCH"
+    assert [a["attempt"] for a in result.attempts] == [1, 2]
+
+
+def test_valid_candidate_missing_requested_guarantee_is_rejected():
+    missing = SOURCE.replace("  guarantee no_starvation(batch, 350 ms);\n", "")
+    with patch("schedguard.inference.policy_gen.OpenRouterProvider", _mock_provider(missing)):
+        result = propose_policy(PROMPT, provider_name="openrouter")
+    assert result.proposal_status == "PROPOSAL_REJECTED"
+    assert result.compilation_status == "COMPILATION_SUCCESS"
+    assert result.consistency_status == "MISMATCH"
+    assert any("Missing no_starvation" in e for e in result.consistency_errors)
+
+
+def test_valid_candidate_reversing_priority_is_rejected():
+    reversed_source = SOURCE.replace("class web { prio 0;", "class web { prio 1;").replace(
+        "class batch { prio 1;", "class batch { prio 0;")
+    with patch("schedguard.inference.policy_gen.OpenRouterProvider", _mock_provider(reversed_source)):
+        result = propose_policy(PROMPT, provider_name="openrouter")
+    assert result.proposal_status == "PROPOSAL_REJECTED"
+    assert result.consistency_status == "MISMATCH"
+    assert any("higher priority" in e for e in result.consistency_errors)
 
 
 def test_offline_rules_remains_honestly_labelled():
@@ -131,3 +193,17 @@ def test_api_synthesize_openrouter_default_repair_keeps_verifier_authority():
     assert payload["proposal"]["provider"] == "openrouter"
     assert payload["proposal"]["guarantee_status"] == "VERIFIED"
     assert payload["repair"]["iterations"][-1]["status"] == "VERIFIED"
+
+
+def test_api_synthesize_rejects_invalid_live_candidate_without_500():
+    invalid_source = "policy broken { > }"
+    client = TestClient(app)
+    with patch("schedguard.inference.policy_gen.OpenRouterProvider", _mock_provider(invalid_source)):
+        response = client.post("/api/synthesize", json={"prompt": PROMPT, "provider": "openrouter"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is False
+    assert payload["proposal"]["proposal_status"] == "PROPOSAL_REJECTED"
+    assert payload["proposal"]["compilation_status"] == "COMPILATION_FAILED"
+    assert payload["proposal"]["consistency_status"] == "MISMATCH"
+    assert payload["repair"]["iterations"][0]["status"] == "REJECTED"

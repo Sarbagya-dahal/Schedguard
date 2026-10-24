@@ -1,0 +1,429 @@
+[
+  {
+    "id": "pos_01_priority_basic",
+    "category": "priority_order",
+    "prompt": "Prioritize web tasks over batch tasks.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_order": ["web", "batch"]
+  },
+  {
+    "id": "pos_02_priority_prefer",
+    "category": "priority_order",
+    "prompt": "Prefer interactive requests ahead of background workers.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_order": ["web", "batch"]
+  },
+  {
+    "id": "pos_03_priority_favor",
+    "category": "priority_order",
+    "prompt": "Favor realtime audio over batch computation.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["batch", "rt"],
+    "expected_priority_order": ["rt", "batch"]
+  },
+  {
+    "id": "pos_04_priority_strict_higher",
+    "category": "priority_order",
+    "prompt": "Web has strict higher priority than batch.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_order": ["web", "batch"]
+  },
+  {
+    "id": "pos_05_priority_numeric",
+    "category": "numeric_priority",
+    "prompt": "Web at priority 0 and batch at priority 1.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_values": {"web": 0, "batch": 1}
+  },
+  {
+    "id": "pos_06_priority_numeric_three_tier",
+    "category": "numeric_priority",
+    "prompt": "Real-time audio at priority 0, web at priority 1, and batch at priority 2.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch", "rt"],
+    "expected_priority_values": {"rt": 0, "web": 1, "batch": 2}
+  },
+  {
+    "id": "pos_07_priority_equal_tiers",
+    "category": "numeric_priority",
+    "prompt": "Web priority 0 and batch priority 0.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_values": {"web": 0, "batch": 0}
+  },
+  {
+    "id": "pos_08_quantum_values",
+    "category": "quantum",
+    "prompt": "Set the web quantum to 6 ms and the batch quantum to 20 ms.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_quantum_values": {"web": 6, "batch": 20}
+  },
+  {
+    "id": "pos_09_quantum_order",
+    "category": "quantum",
+    "prompt": "Give batch tasks a longer time quantum than web tasks.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_quantum_order": ["batch", "web"]
+  },
+  {
+    "id": "pos_10_quantum_comparison_paraphrase",
+    "category": "quantum",
+    "prompt": "Let worker quantum be longer than frontend quantum.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_quantum_order": ["batch", "web"]
+  },
+  {
+    "id": "pos_11_quantum_single_value",
+    "category": "quantum",
+    "prompt": "Web quantum of 10 ms with batch priority 1.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_quantum_values": {"web": 10}
+  },
+  {
+    "id": "pos_12_aging_value",
+    "category": "aging",
+    "prompt": "Add aging of 160 ms to the batch class and prioritize web over batch.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_aging_values": {"batch": 160}
+  },
+  {
+    "id": "pos_13_aging_paraphrase",
+    "category": "aging",
+    "prompt": "Give aging of 100 ms to background workers, with web priority 0.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_aging_values": {"batch": 100}
+  },
+  {
+    "id": "pos_14_wait_bound_prevent_starvation",
+    "category": "guarantees",
+    "prompt": "Prioritize web over batch and prevent batch starvation with a maximum waiting-time requirement of 400 milliseconds.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_wait_requirements": {"batch": 400}
+  },
+  {
+    "id": "pos_15_wait_bound_must_not_wait",
+    "category": "guarantees",
+    "prompt": "Web ahead of batch; batch must not wait longer than 350 ms.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_wait_requirements": {"batch": 350}
+  },
+  {
+    "id": "pos_16_wait_bound_target_before_value",
+    "category": "guarantees",
+    "prompt": "Batch maximum waiting time is no more than 300 milliseconds. Prioritize web over batch.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_wait_requirements": {"batch": 300}
+  },
+  {
+    "id": "pos_17_min_share_percentage",
+    "category": "guarantees",
+    "prompt": "Web must have 40% minimum cpu share and batch must have 20% minimum share.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_min_share_requirements": {"web": 40, "batch": 20}
+  },
+  {
+    "id": "pos_18_min_share_needs_keyword",
+    "category": "guarantees",
+    "prompt": "Interactive tasks require 50% cpu share with worker tasks at priority 1.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_min_share_requirements": {"web": 50}
+  },
+  {
+    "id": "pos_19_full_studio_spec",
+    "category": "conjunctions",
+    "prompt": "Prioritize interactive web tasks, give batch tasks a longer time quantum, and prevent batch starvation with a maximum waiting-time requirement of 400 milliseconds.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_order": ["web", "batch"],
+    "expected_quantum_order": ["batch", "web"],
+    "expected_wait_requirements": {"batch": 400}
+  },
+  {
+    "id": "pos_20_three_tier_complete",
+    "category": "conjunctions",
+    "prompt": "Real-time audio at priority 0 with 2ms quantum, interactive web tasks at priority 1 with 5ms quantum and 100ms aging, and background batch at priority 2 with 500ms aging.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch", "rt"],
+    "expected_priority_values": {"rt": 0, "web": 1, "batch": 2},
+    "expected_quantum_values": {"rt": 2, "web": 5},
+    "expected_aging_values": {"web": 100, "batch": 500}
+  },
+  {
+    "id": "pos_21_alias_ui_and_worker",
+    "category": "aliases",
+    "prompt": "UI tasks at priority 0 with 5ms quantum; worker tasks at priority 1 with 20ms quantum.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_values": {"web": 0, "batch": 1},
+    "expected_quantum_values": {"web": 5, "batch": 20}
+  },
+  {
+    "id": "pos_22_alias_frontend_and_computation",
+    "category": "aliases",
+    "prompt": "Prioritize frontend over computation; computation quantum 25 ms.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_order": ["web", "batch"],
+    "expected_quantum_values": {"batch": 25}
+  },
+  {
+    "id": "pos_23_alias_sensor_and_ml",
+    "category": "aliases",
+    "prompt": "Sensor tasks priority 0 and ML tasks priority 2.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["batch", "rt"],
+    "expected_priority_values": {"rt": 0, "batch": 2}
+  },
+  {
+    "id": "pos_24_alias_latency_and_long_running",
+    "category": "aliases",
+    "prompt": "Favor latency tasks over long running tasks, give long running quantum 30 ms.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_order": ["web", "batch"],
+    "expected_quantum_values": {"batch": 30}
+  },
+  {
+    "id": "pos_25_alias_audio_and_worker",
+    "category": "aliases",
+    "prompt": "Audio priority 0, worker priority 1, worker aging 120 ms.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["batch", "rt"],
+    "expected_priority_values": {"rt": 0, "batch": 1},
+    "expected_aging_values": {"batch": 120}
+  },
+  {
+    "id": "pos_26_tuning_adaptation",
+    "category": "tuning",
+    "prompt": "Prioritize web over batch, add aging of 100 ms to batch, and tune aging.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_tuning": true
+  },
+  {
+    "id": "pos_27_tuning_optimize_keyword",
+    "category": "tuning",
+    "prompt": "Web priority 0, batch priority 1, batch aging 150 ms, optimize aging range.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_tuning": true
+  },
+  {
+    "id": "pos_28_three_tier_priorities_chain",
+    "category": "priority_order",
+    "prompt": "Prioritize real-time over web and web over batch.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch", "rt"],
+    "expected_priority_order": ["rt", "web", "batch"]
+  },
+  {
+    "id": "pos_29_mixed_conjunctions_semicolon",
+    "category": "conjunctions",
+    "prompt": "Prefer web over batch; set web quantum to 5 ms; set batch quantum to 25 ms.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_priority_order": ["web", "batch"],
+    "expected_quantum_values": {"web": 5, "batch": 25}
+  },
+  {
+    "id": "pos_30_stop_starvation_phrase",
+    "category": "guarantees",
+    "prompt": "Web ahead of batch; stop batch starvation 450 ms.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_wait_requirements": {"batch": 450}
+  },
+  {
+    "id": "pos_31_max_wait_at_most",
+    "category": "guarantees",
+    "prompt": "Prioritize web over batch; max wait for batch is at most 320 ms.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_wait_requirements": {"batch": 320}
+  },
+  {
+    "id": "pos_32_quantum_equal_ms",
+    "category": "quantum",
+    "prompt": "Web quantum = 8 ms and batch quantum = 24 ms.",
+    "expected_status": "SUPPORTED",
+    "expected_classes": ["web", "batch"],
+    "expected_quantum_values": {"web": 8, "batch": 24}
+  },
+
+  {
+    "id": "neg_01_priority_cycle_direct",
+    "category": "conflict_cycle",
+    "prompt": "Prioritize web over batch and prioritize batch over web.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_conflict_substr": "cycle"
+  },
+  {
+    "id": "neg_02_priority_cycle_with_attributes",
+    "category": "conflict_cycle",
+    "prompt": "Prioritize web over batch and prioritize batch over web. Give web a 5 ms quantum and batch a 20 ms quantum.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_conflict_substr": "cycle"
+  },
+  {
+    "id": "neg_03_priority_cycle_has_higher_than",
+    "category": "conflict_cycle",
+    "prompt": "Web has higher priority than batch and batch has higher priority than web.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_conflict_substr": "cycle"
+  },
+  {
+    "id": "neg_04_priority_cycle_three_classes",
+    "category": "conflict_cycle",
+    "prompt": "Web has higher priority than batch; batch has higher priority than real-time; real-time has higher priority than web.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_conflict_substr": "cycle"
+  },
+  {
+    "id": "neg_05_priority_self_reference",
+    "category": "conflict_self",
+    "prompt": "Prioritize web over web.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_conflict_substr": "both sides"
+  },
+  {
+    "id": "neg_06_priority_out_of_range_high",
+    "category": "out_of_range",
+    "prompt": "Web at priority 9 and batch at priority 1.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "outside the DSL range 0..7"
+  },
+  {
+    "id": "neg_07_priority_out_of_range_extreme",
+    "category": "out_of_range",
+    "prompt": "Batch at priority 99 with 20ms quantum.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "outside the DSL range 0..7"
+  },
+  {
+    "id": "neg_08_quantum_contradictory_order",
+    "category": "conflict_order",
+    "prompt": "Give batch a longer quantum than web and give web a longer quantum than batch.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_conflict_substr": "Contradictory quantum"
+  },
+  {
+    "id": "neg_09_quantum_self_longer",
+    "category": "conflict_self",
+    "prompt": "Give web a longer quantum than web.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_conflict_substr": "both sides"
+  },
+  {
+    "id": "neg_10_no_starvation_without_bound",
+    "category": "ambiguous_guarantee",
+    "prompt": "Create web and batch classes with no-starvation guarantees.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "explicit maximum wait bound"
+  },
+  {
+    "id": "neg_11_no_starvation_qualitative_prevent",
+    "category": "ambiguous_guarantee",
+    "prompt": "Prioritize web over batch and prevent starvation completely.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "explicit maximum wait bound"
+  },
+  {
+    "id": "neg_12_wait_requirement_no_target_class",
+    "category": "ambiguous_guarantee",
+    "prompt": "Web and batch classes, and maximum waiting time is no more than 300 milliseconds.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "explicit target class"
+  },
+  {
+    "id": "neg_13_completely_unknown_classes",
+    "category": "unsupported_classes",
+    "prompt": "Prioritize database queries over network streaming packets.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "No supported workload class"
+  },
+  {
+    "id": "neg_14_non_scheduling_chitchat",
+    "category": "unsupported_chitchat",
+    "prompt": "Tell me a joke about operating system kernels and compilers.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "No actionable scheduling requirement"
+  },
+  {
+    "id": "neg_15_empty_requirements_classes_only",
+    "category": "unsupported_incomplete",
+    "prompt": "Web and batch classes.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "no supported scheduling requirement was specified"
+  },
+  {
+    "id": "neg_16_kernel_mechanism_cfs",
+    "category": "unsupported_semantics",
+    "prompt": "Implement Completely Fair Scheduler with red-black trees and vruntime tracking.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "No supported workload class"
+  },
+  {
+    "id": "neg_17_multi_core_numa",
+    "category": "unsupported_semantics",
+    "prompt": "Migrate web threads across NUMA nodes 0 and 1 with load balancing.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "no supported scheduling requirement was specified"
+  },
+  {
+    "id": "neg_18_preemption_time_slice_interrupt",
+    "category": "unsupported_semantics",
+    "prompt": "Enable hardware timer interrupts for preemptive context switching.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "No actionable scheduling requirement"
+  },
+  {
+    "id": "neg_19_priority_inheritance_mutex",
+    "category": "unsupported_semantics",
+    "prompt": "Apply priority inheritance protocol to mutex locks held by batch tasks.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "no supported scheduling requirement was specified"
+  },
+  {
+    "id": "neg_20_network_bandwidth_shaping",
+    "category": "unsupported_semantics",
+    "prompt": "Shape egress network bandwidth to 10 Gbps using token bucket filtering.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "No actionable scheduling requirement"
+  },
+  {
+    "id": "neg_21_contradictory_equal_and_higher",
+    "category": "conflict_cycle",
+    "prompt": "Web priority 0 and batch priority 0 and prioritize web over batch.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_conflict_substr": ""
+  },
+  {
+    "id": "neg_22_unsupported_greeting",
+    "category": "unsupported_chitchat",
+    "prompt": "Hello world, what is SchedGuard?",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "No actionable scheduling requirement"
+  },
+  {
+    "id": "neg_23_out_of_range_negative_priority",
+    "category": "out_of_range",
+    "prompt": "Web priority 10 and batch priority 12.",
+    "expected_status": "UNSUPPORTED_INTENT",
+    "expected_unsupported_substr": "outside the DSL range 0..7"
+  }
+]

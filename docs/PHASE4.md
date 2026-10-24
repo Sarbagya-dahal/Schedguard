@@ -17,11 +17,15 @@ with `vmlinux.h`, libbpf headers, `scx/common.bpf.h`, and
 The formal proof remains the single-CPU, CPU-bound model in `docs/MODEL.md`.
 Linux blocking, arrivals, multiple CPUs, kernel preemption details, BPF
 verifier acceptance, and runtime behavior are separate validation concerns.
-Task class assignment is intentionally a loader responsibility. For a
-multi-class IR, the emitted source refuses to invent a PID/process mapping and
-routes unmappable tasks to the global FIFO, reporting `UNSUPPORTED`. A
-single-class IR can be emitted with its only class selected. Aging promotion
-and PolicyLang guarantee claims remain explicitly unsupported by this backend.
+Task class assignment is intentionally a loader responsibility, but the current
+backend does not yet define the required control-plane mapping or prove that
+`select_cpu` and `enqueue` apply it consistently. Therefore multi-class IRs are
+rejected before C emission with a specific `UNSUPPORTED` diagnostic; they are
+never emitted with a misleading global-FIFO fallback. A single-class, no-aging
+IR can be emitted with its only class selected and its configured quantum used
+on the class DSQ. Policies with aging are also rejected until enqueue-age
+promotion is implemented in runtime decision logic. PolicyLang guarantee claims
+remain explicitly unsupported by this backend.
 
 The generated enqueue call follows the sched_ext ABI order
 `(task, dsq_id, slice_ns, enqueue_flags)` and includes the sched_ext

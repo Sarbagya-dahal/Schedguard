@@ -33,7 +33,13 @@ class CodegenResult:
     status: str = "PASSED"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"c_code": self.c_code, "policy_name": self.policy_name,
+        # Unsupported semantics are a hard source-emission boundary.  Keep
+        # diagnostics and mappings for inspection, but never serialize an
+        # executable-looking source payload alongside an UNSUPPORTED result.
+        source = self.c_code
+        if self.status.upper() == "UNSUPPORTED" or self.status_label == "UNSUPPORTED" or self.unsupported_semantics:
+            source = ""
+        return {"c_code": source, "policy_name": self.policy_name,
                 "is_complete": self.is_complete, "status_label": self.status_label,
                 "limitations": self.limitations,
                 "supported_semantics": self.supported_semantics,
@@ -56,6 +62,16 @@ def _validate(ir: IRPolicy) -> None:
             errors.append(f"class '{c.name}' quantum must be positive")
         if c.aging_ms < 0:
             errors.append(f"class '{c.name}' aging must not be negative")
+    if len(ir.classes) > 1:
+        errors.append(
+            "multi-class sched_ext emission is unsupported until a control-plane task-to-class "
+            "mapping and select_cpu/enqueue path are implemented; refusing global-FIFO fallback"
+        )
+    if any(c.aging_ms for c in ir.classes):
+        errors.append(
+            "aging sched_ext emission is unsupported until enqueue-age promotion is implemented; "
+            "refusing to emit inert aging_ns configuration"
+        )
     if errors:
         raise ValueError("unsupported sched_ext backend policy: " + "; ".join(errors))
 
@@ -64,10 +80,6 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     """Emit deterministic sched_ext C for the validated, fixed-size IR."""
     _validate(ir)
     unsupported: list[str] = []
-    if len(ir.classes) > 1:
-        unsupported.append("runtime task-to-class mapping is undefined for abstract multi-class policies")
-    if any(c.aging_ms for c in ir.classes):
-        unsupported.append("exact aging promotion is not implemented by this backend")
     if ir.guarantees:
         unsupported.append("PolicyLang guarantees are not established for real multi-CPU sched_ext execution")
     lines: list[str] = []

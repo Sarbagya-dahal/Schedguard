@@ -289,7 +289,12 @@ def generate_run_pdf(run: dict[str, Any]) -> bytes:
         for st in stages:
             pdf.cell(45, 5, st.get("name", ""), 1, align="L", new_x=XPos.RIGHT, new_y=YPos.TOP)
             status = st.get("status", "")
-            pdf.set_text_color(22, 101, 52 if status == "COMPLETED" else (185, 28, 28 if status == "FAILED" else 100))
+            if status == "COMPLETED":
+                pdf.set_text_color(22, 101, 52)
+            elif status == "FAILED":
+                pdf.set_text_color(185, 28, 28)
+            else:
+                pdf.set_text_color(100, 116, 139)
             pdf.cell(25, 5, status, 1, align="C", new_x=XPos.RIGHT, new_y=YPos.TOP)
             pdf.set_text_color(51, 65, 85)
             pdf.cell(25, 5, f"{st.get('duration_ms', 0):.2f}", 1, align="R", new_x=XPos.RIGHT, new_y=YPos.TOP)
@@ -299,7 +304,8 @@ def generate_run_pdf(run: dict[str, Any]) -> bytes:
         pdf.cell(0, 5, "No stage telemetry recorded.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     # 3. IR Table
-    ir_classes = run.get("compile", {}).get("ir", {}).get("classes", [])
+    compile_data = run.get("compile") or {}
+    ir_classes = (compile_data.get("ir") or {}).get("classes", [])
     if ir_classes:
         pdf.section_heading("3. Fixed-Size Intermediate Representation (Class Table)")
         pdf.set_font("Helvetica", "B", 8)

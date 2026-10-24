@@ -53,6 +53,9 @@ class TestOpenRouterProvider:
                 assert result == '{"guarantees":[], "rationale":"test"}'
                 # Verify the request was made
                 mock_urlopen.assert_called_once()
+                sent_payload = json.loads(mock_urlopen.call_args[0][0].data.decode("utf-8"))
+                assert sent_payload["stream"] is False
+                assert sent_payload["max_tokens"] == 4096
 
     def test_retry_on_429(self):
         from schedguard.inference.providers import OpenRouterProvider
@@ -105,13 +108,26 @@ class TestOpenRouterProvider:
             with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
                 OpenRouterProvider()
 
-    def test_missing_model(self):
+    def test_missing_model_uses_default_flint(self):
+        """Without SCHEDGUARD_MODEL, OpenRouterProvider defaults to recursive/flint-v1.0:free."""
         from schedguard.inference.providers import OpenRouterProvider
         env = {k: v for k, v in os.environ.items() if k != "SCHEDGUARD_MODEL"}
         env["OPENROUTER_API_KEY"] = "sk-test"
         with patch.dict(os.environ, env, clear=True):
-            with pytest.raises(ValueError, match="SCHEDGUARD_MODEL"):
-                OpenRouterProvider()
+            prov = OpenRouterProvider()
+            assert prov.model == "recursive/flint-v1.0:free"
+
+            body = _openrouter_response_body('{"guarantees":[], "rationale":"test"}')
+            mock_resp = MagicMock()
+            mock_resp.read.return_value = body
+            mock_resp.status = 200
+            mock_resp.__enter__ = lambda s: s
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            with patch("urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+                prov.complete(_make_prompt())
+                req = mock_urlopen.call_args[0][0]
+                sent_payload = json.loads(req.data.decode("utf-8"))
+                assert sent_payload["model"] == "recursive/flint-v1.0:free"
 
     def test_malformed_response(self):
         from schedguard.inference.providers import OpenRouterProvider

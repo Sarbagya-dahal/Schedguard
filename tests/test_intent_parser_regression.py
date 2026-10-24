@@ -43,6 +43,45 @@ def test_contradictory_priority_remains_rejected():
     result = generate_by_rules("Prioritize web over batch and batch over web.")
     assert result.status == "UNSUPPORTED_INTENT"
     assert result.source_code == ""
+    assert any("cycle" in c.lower() for c in result.intent["conflicts"])
+
+
+def test_exact_p0_offline_rules_intent_workflow():
+    prompt = (
+        "Prioritize interactive web tasks, give batch tasks a longer time quantum, "
+        "and prevent batch starvation with a maximum waiting-time requirement of 400 milliseconds."
+    )
+    from schedguard.inference.policy_gen import propose_policy
+    from schedguard.compiler import compile_source
+
+    # 1. Rule engine proposal
+    result = propose_policy(prompt, provider_name="rules")
+    assert result.proposal_status == "PROPOSAL_GENERATED"
+    assert result.status == "UNTRUSTED_PROPOSAL"
+    assert result.intent_status == "SUPPORTED"
+    assert result.extracted_classes == ["web", "batch"]
+
+    # 2. Source code checks
+    source = result.source_code
+    assert source != ""
+    assert "guarantee no_starvation(batch, 400 ms);" in source
+
+    # 3. Real compilation checks
+    c_res = compile_source(source)
+    assert c_res.ok and c_res.ir is not None
+    classes = {c.name: c for c in c_res.ir.classes}
+    assert "web" in classes and "batch" in classes
+
+    # Lower numeric prio means higher priority in PolicyLang
+    assert classes["web"].prio < classes["batch"].prio
+    # Longer quantum for batch
+    assert classes["batch"].quantum_ms > classes["web"].quantum_ms
+
+    # 4. Intent consistency checks
+    assert result.consistency_status == "MATCH"
+    assert result.compilation_status == "COMPILATION_SUCCESS"
+    assert result.consistency_errors == []
+
 
 
 def test_conjunctive_priority_cycle_is_rejected_before_policy_generation():
