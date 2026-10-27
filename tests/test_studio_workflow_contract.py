@@ -58,6 +58,17 @@ def test_formal_guarantees_workspace_exposes_real_run_evidence_and_stale_state()
     assert "multi-CPU" in html
 
 
+def test_policy_assistant_uses_bounded_synthesis_and_shows_formal_outcome():
+    script = (STUDIO / "app.js").read_text(encoding="utf-8")
+    assert 'fetch("/api/synthesize"' in script
+    assert 'repair: true' in script
+    assert "data.proposal || data" in script
+    assert "data.source || proposal.source_code" in script
+    assert "proposal.guarantee_status" in script
+    assert "lastIteration?.status" in script
+    assert "Formal correction:" in script
+
+
 def test_studio_api_error_message_behavior_under_node():
     import json
     import subprocess

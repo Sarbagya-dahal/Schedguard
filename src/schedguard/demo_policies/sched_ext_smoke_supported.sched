@@ -1,0 +1,8 @@
+policy sched_ext_smoke {
+  option max_tasks = 8;
+  class web {
+    prio 0;
+    quantum 5 ms;
+    kind interactive;
+  }
+}

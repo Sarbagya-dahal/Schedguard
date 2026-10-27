@@ -152,6 +152,7 @@ class SynthesisRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=12000)
     provider: str = "stub"
     repair: bool = True
+    clarification_answer: Optional[str] = Field(default=None, max_length=100)
 
 
 class RepairRequest(BaseModel):
@@ -659,7 +660,8 @@ def api_synthesize(req: SynthesisRequest):
     if req.provider not in {"stub", "rules", "anthropic", "openrouter"}:
         raise HTTPException(status_code=400, detail="provider must be stub, rules, anthropic, or openrouter")
     try:
-        result = synthesize_policy(req.prompt, provider_name=req.provider, repair=req.repair)
+        result = synthesize_policy(req.prompt, provider_name=req.provider, repair=req.repair,
+                                   clarification_answer=req.clarification_answer)
         payload = result.to_dict()
         if payload["proposal"].get("status") == "PROVIDER_ERROR":
             return provider_error_response("synthesize_policy", req.provider,
@@ -774,8 +776,9 @@ def api_phase4_lifecycle():
 
 @app.get("/api/examples")
 def api_examples():
-    """Returns bundled example SchedLang policies and default workloads."""
+    """Return bundled examples plus allowlisted, workflow-focused demo cases."""
     examples_dir = ROOT_DIR / "examples"
+    demo_dir = pathlib.Path(__file__).resolve().parent / "demo_policies"
     examples = []
     descriptions = {
         "aging_fix": "Priority + aging bounds batch wait time and prevents starvation.",
@@ -789,11 +792,35 @@ def api_examples():
         name = p.stem
         with open(p, encoding="utf-8") as f:
             code = f.read()
+        demo_id = {
+            "aging_fix": "verified-aging-baseline",
+        }.get(name)
         examples.append({
             "name": name,
             "filename": p.name,
             "description": descriptions.get(name, "Example scheduling policy"),
             "code": code,
+            "demo_id": demo_id,
+            "demo_kind": "baseline" if demo_id else "reference",
+        })
+
+    demo_specs = [
+        ("repairable-starvation", "repairable_starvation.sched", "Repairable starvation: initial VIOLATED, deterministic aging repair reaches VERIFIED.", "repair"),
+        ("no-guarantees", "no_guarantees.sched", "Valid policy with no declarations: expected NO_GUARANTEES, never false VERIFIED.", "negative"),
+        ("sched-ext-smoke-supported", "sched_ext_smoke_supported.sched", "Smallest supported sched_ext source-emission smoke test.", "sched_ext"),
+        ("sched-ext-unsupported-policy", "sched_ext_unsupported_policy.sched", "Expected UNSUPPORTED sched_ext multi-class policy; no fallback C is emitted.", "negative"),
+    ]
+    for demo_id, filename, description, demo_kind in demo_specs:
+        path = demo_dir / filename
+        if not path.is_file():
+            continue
+        examples.append({
+            "name": path.stem,
+            "filename": filename,
+            "description": description,
+            "code": path.read_text(encoding="utf-8"),
+            "demo_id": demo_id,
+            "demo_kind": demo_kind,
         })
 
     # Default workload

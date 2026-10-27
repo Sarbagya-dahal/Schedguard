@@ -180,14 +180,19 @@ def repair_policy(source: str, *, feedback: str = "template",
     for n in range(max_iterations + 1):
         compiled = compile_source(current)
         if not compiled.ok:
-            history.append(RepairIteration(n, "REJECTED", message="candidate failed compilation")); return RepairResult(False, current, history)
+            history.append(RepairIteration(n, "REJECTED", message="candidate failed compilation")); return RepairResult(False, source, history)
         verdicts = check_all(compiled.ir)
         vd = [v.to_dict() for v in verdicts]
         if verdicts and all(v.status == "VERIFIED" for v in verdicts):
             history.append(RepairIteration(n, "VERIFIED", verdicts=vd)); return RepairResult(True, current, history)
+        if not verdicts:
+            history.append(RepairIteration(n, "NO_GUARANTEES",
+                                           message="policy declares no formal guarantees; nothing is eligible for repair",
+                                           verdicts=[]))
+            return RepairResult(False, source, history)
         violated = next((v for v in verdicts if v.status == "VIOLATED"), None)
         if violated is None:
-            history.append(RepairIteration(n, "UNKNOWN", message="no violated guarantee; UNKNOWN is not success", verdicts=vd)); return RepairResult(False, current, history)
+            history.append(RepairIteration(n, "UNKNOWN", message="final verification is UNKNOWN; repair is not accepted", verdicts=vd)); return RepairResult(False, source, history)
         if n == max_iterations:
             history.append(RepairIteration(n, "BUDGET_EXHAUSTED", verdicts=vd)); break
         classification = classify_violation(compiled.ir, violated)
@@ -209,4 +214,6 @@ def repair_policy(source: str, *, feedback: str = "template",
         history.append(RepairIteration(n, "REPAIRED", classification.cause.value, feedback, vd))
         seen_candidates.add(candidate)
         current = candidate
-    return RepairResult(False, current, history)
+    # An unverified candidate is never a repaired policy. Keep the original
+    # source available so callers cannot present a partial edit as accepted.
+    return RepairResult(False, source, history)

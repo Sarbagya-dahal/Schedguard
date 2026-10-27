@@ -246,25 +246,27 @@
           
           <!-- Compact Primary Toolbar -->
           <div class="editor-toolbar">
-            <div class="toolbar-left">
+            <div class="toolbar-primary">
               <button id="editorCompileBtn" class="btn btn-primary" title="Execute full compilation, Z3 verification, and trace (Ctrl+Enter)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 <span>Compile &amp; Run</span>
               </button>
+            </div>
 
+            <div class="toolbar-demo" aria-label="Built-in demo policies">
+              <span class="toolbar-demo-label">Demo cases</span>
               <div class="select-wrapper">
-                <select id="editorExampleSelect" class="select-field" title="Load predefined policy example">
-                  <option value="aging_fix">aging_fix.sched (Aging Fix)</option>
-                  <option value="strict_starves">strict_starves.sched (Strict Priority Starves)</option>
-                  <option value="balanced">balanced.sched (Equal Tier Round-Robin)</option>
-                  <option value="three_tier">three_tier.sched (Three Tier RT/Web/ML)</option>
-                  <option value="invalid_ranges">invalid_ranges.sched (Safety Pass Rejection)</option>
+                <select id="editorExampleSelect" class="select-field" title="Choose a built-in demo policy">
+                  <option value="">Choose a demo policy…</option>
                 </select>
               </div>
+              <button id="editorLoadExampleBtn" class="btn btn-secondary btn-sm" type="button">Load Example</button>
+              <span id="editorExampleDescription" class="toolbar-demo-description" title="Selected demo description"></span>
+            </div>
+
+            <div class="toolbar-meta">
               <span id="editorPolicyState" class="status-message" title="Current editor source state">Named preset</span>
-
               <button id="editorPdfBtn" class="btn btn-secondary btn-sm" title="Download academic PDF report for current run">Download PDF</button>
-
               <!-- Real Compilation Stage Breadcrumbs -->
               <div id="compilerStagesBar" class="compiler-stages-bar">
                 <span class="stages-label">Compiler:</span>
@@ -364,6 +366,15 @@
                   <button id="assistantInsertBtn" class="btn btn-secondary btn-sm">Insert Candidate into Editor &rarr;</button>
                 </div>
                 <p id="assistantRationale" class="assistant-rationale"></p>
+                <div id="assistantClarificationBox" class="assistant-clarification-box hidden" role="status">
+                  <div class="assistant-clarification-question" id="assistantClarificationQuestion"></div>
+                  <div class="assistant-clarification-controls">
+                    <input id="assistantClarificationAnswer" class="text-input" type="text" inputmode="decimal" placeholder="e.g. 400 ms" aria-label="Clarification answer">
+                    <button id="assistantClarificationSubmit" class="btn btn-primary btn-sm" type="button">Continue</button>
+                    <button id="assistantClarificationCancel" class="btn btn-secondary btn-sm" type="button">Cancel</button>
+                  </div>
+                  <div id="assistantClarificationError" class="assistant-clarification-error hidden"></div>
+                </div>
                 <pre class="assistant-code-output"><code id="assistantCodeOutput">// Generated candidate will appear here...</code></pre>
               </div>
             </div>
@@ -372,9 +383,10 @@
           <!-- Compact Formal Verification Summary Bar in Editor -->
           <div class="verification-summary-bar" id="editorVerifBar">
             <div class="summary-meta">
-              <span class="subtle-title">Formal Verification:</span>
+              <span class="subtle-title">Editor Policy Verification:</span>
               <span id="editorVerifStatusBadge" class="badge badge-neutral">NOT RUN</span>
               <span id="editorVerifSummaryText" class="editor-verif-text">Compile policy to evaluate Z3 formal guarantees.</span>
+              <span id="editorVerifProvenance" class="editor-verif-provenance">No editor policy run yet.</span>
             </div>
             <button class="btn btn-sm btn-secondary" onclick="switchView('view-verification')">Inspect Formal Proofs &amp; Formulas &rarr;</button>
           </div>

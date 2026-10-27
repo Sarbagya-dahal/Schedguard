@@ -82,6 +82,28 @@ def test_exact_p0_offline_rules_intent_workflow():
     assert result.compilation_status == "COMPILATION_SUCCESS"
     assert result.consistency_errors == []
 
+    from schedguard.verify.properties import check_all
+    checked = check_all(c_res.ir)
+    assert len(checked) == 1
+    assert checked[0].status == "VERIFIED"
+
+
+def test_explicitly_forbidden_guarantees_do_not_hide_positive_requirements():
+    prompt = (
+        "Create a scheduling policy that prioritizes interactive web tasks over batch tasks "
+        "and gives batch tasks a longer time quantum. Do not add any formal guarantees."
+    )
+    intent = extract_intent(prompt)
+    assert intent.priority_order == ["web", "batch"]
+    assert intent.quantum_order == ["batch", "web"]
+    assert intent.forbid_guarantees is True
+    assert not intent.unsupported
+
+    result = generate_by_rules(prompt)
+    assert result.proposal_status == "PROPOSAL_GENERATED"
+    assert result.consistency_status == "MATCH"
+    assert "guarantee " not in result.source_code
+
 
 
 def test_conjunctive_priority_cycle_is_rejected_before_policy_generation():

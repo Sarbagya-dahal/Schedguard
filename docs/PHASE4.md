@@ -23,7 +23,10 @@ backend does not yet define the required control-plane mapping or prove that
 rejected before C emission with a specific `UNSUPPORTED` diagnostic; they are
 never emitted with a misleading global-FIFO fallback. A single-class, no-aging
 IR can be emitted with its only class selected and its configured quantum used
-on the class DSQ. Policies with aging are also rejected until enqueue-age
+on the class DSQ. It also defines `select_cpu` and applies that same quantum
+when the kernel's default idle-CPU path would otherwise bypass `enqueue`; a
+metadata-map failure uses the configured quantum on the global fallback path.
+Policies with aging are also rejected until enqueue-age
 promotion is implemented in runtime decision logic. PolicyLang guarantee claims
 remain explicitly unsupported by this backend.
 

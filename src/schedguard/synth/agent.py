@@ -1,5 +1,6 @@
 """Small synthesis facade that composes existing proposal and repair APIs."""
 from dataclasses import dataclass
+import re
 from typing import Any
 from ..inference.policy_gen import propose_policy
 from ..repair.loop import repair_policy, MAX_ITERATIONS
@@ -15,8 +16,18 @@ class SynthesisResult:
         return {"success": self.success, "source": self.source,
                 "proposal": self.proposal, "repair": self.repair}
 
+
+def apply_clarification(prompt: str, answer: str) -> str:
+    """Validate and append a user clarification without inventing a value."""
+    match = re.fullmatch(r"\s*(\d+)\s*(?:ms|milliseconds?)\s*", answer or "", re.I)
+    if not match or int(match.group(1)) <= 0 or int(match.group(1)) > 2147483647:
+        raise ValueError("Enter a positive whole-number bound in milliseconds, for example 400 ms.")
+    return f"{prompt.strip()}\nClarification: the maximum acceptable waiting time for background tasks is {int(match.group(1))} ms."
+
 def synthesize_policy(intent: str, *, provider_name: str | None = None,
-                      repair: bool = True) -> SynthesisResult:
+                      repair: bool = True, clarification_answer: str | None = None) -> SynthesisResult:
+    if clarification_answer is not None:
+        intent = apply_clarification(intent, clarification_answer)
     proposal = propose_policy(intent, provider_name=provider_name)
     source = proposal.source_code
     if not source:

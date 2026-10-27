@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from schedguard.cli import main
 from schedguard.inference.policy_gen import _extract_policy_source, propose_policy
+from schedguard.synth.agent import synthesize_policy
 from schedguard.server import app
 
 
@@ -17,8 +18,17 @@ SOURCE = """policy llm_policy {
   guarantee no_starvation(batch, 350 ms);
 }"""
 
+PROMPT_400 = "Prioritize interactive web tasks, give batch tasks a longer time quantum, and prevent batch starvation with a maximum waiting-time requirement of 400 milliseconds."
+PROMPT_NO_GUARANTEE = "Create a scheduling policy that prioritizes interactive web tasks over batch tasks and gives batch tasks a longer time quantum. Do not add any formal guarantees."
+VIOLATING_SOURCE = """policy llm_policy {
+  option max_tasks = 8;
+  class web { prio 0; quantum 5 ms; kind interactive; }
+  class batch { prio 1; quantum 20 ms; kind batch; }
+  guarantee no_starvation(batch, 400 ms);
+}"""
 
-def _mock_provider(response=None, error=None):
+
+def _mock_provider(response=None, error=None, expected_value="350"):
     class Provider:
         name = "openrouter"
         model = "test/model"
@@ -29,7 +39,8 @@ def _mock_provider(response=None, error=None):
 
         def complete(self, prompt):
             assert "<extracted_intent>" in prompt.user
-            assert "350" in prompt.user
+            if expected_value is not None:
+                assert expected_value in prompt.user
             if error:
                 raise error
             return response
@@ -47,6 +58,20 @@ def test_openrouter_success_uses_live_provider_and_validates_source():
     assert result.compilation_status == "COMPILATION_SUCCESS"
     assert result.consistency_status == "MATCH"
     assert result.source_code == SOURCE
+
+
+def test_openrouter_preserves_positive_requirements_when_guarantees_are_forbidden():
+    no_guarantee_source = """policy llm_policy {
+  option max_tasks = 8;
+  class web { prio 0; quantum 5 ms; kind interactive; }
+  class batch { prio 1; quantum 20 ms; kind batch; }
+}"""
+    with patch("schedguard.inference.policy_gen.OpenRouterProvider", _mock_provider(no_guarantee_source, expected_value=None)):
+        result = propose_policy(PROMPT_NO_GUARANTEE, provider_name="openrouter")
+    assert result.proposal_status == "PROPOSAL_GENERATED"
+    assert result.consistency_status == "MATCH"
+    assert result.intent["forbid_guarantees"] is True
+    assert "guarantee " not in result.source_code
 
 
 @pytest.mark.parametrize("response", ["not PolicyLang", "```json\n{\"policy\": 1}\n```"])
@@ -91,6 +116,16 @@ def test_openrouter_consistency_rejection_preserves_live_metadata():
     assert result.provider == "openrouter"
     assert result.proposal_status == "PROPOSAL_REJECTED"
     assert any("350ms" in e for e in result.consistency_errors)
+
+
+def test_live_candidate_that_compiles_but_violates_is_repaired_by_real_verifier():
+    with patch("schedguard.inference.policy_gen.OpenRouterProvider", _mock_provider(VIOLATING_SOURCE, expected_value="400")):
+        result = synthesize_policy(PROMPT_400, provider_name="openrouter", repair=True)
+    assert result.success is True
+    assert result.proposal["consistency_status"] == "MATCH"
+    assert result.proposal["guarantee_status"] == "VERIFIED"
+    assert "aging" in result.source
+    assert result.repair["iterations"][-1]["status"] == "VERIFIED"
 
 
 def test_policy_source_extraction_accepts_fences_and_surrounding_prose():

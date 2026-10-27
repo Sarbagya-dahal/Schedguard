@@ -10,6 +10,7 @@ const appState = {
   currentSource: "",
   currentPolicyState: "Named preset",
   pendingAiPolicy: null,
+  pendingAssistantClarification: null,
   examples: {},
   tourStep: 1,
   activeView: "view-home",
@@ -204,13 +205,17 @@ async function emitPhase4Source() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source }),
     });
-    if (!res.ok) throw new Error(await apiErrorMessage(res));
-    const data = await res.json();
-    const unsupported = data.status === "UNSUPPORTED" || data.status_label === "UNSUPPORTED" || !data.c_code;
+    const data = await res.json().catch(() => ({}));
+    const unsupported = data.status === "UNSUPPORTED" || data.status_label === "UNSUPPORTED";
     if (unsupported) {
       const reasons = [...(data.unsupported_semantics || []), ...(data.limitations || [])];
-      throw new Error(reasons.join("; ") || "sched_ext source generation is unsupported");
+      output.textContent = "No sched_ext C source emitted.";
+      if (status) status.textContent = `Unsupported policy: ${reasons.join("; ") || data.detail || "backend capability is unavailable"}`;
+      if (badge) { badge.textContent = "UNSUPPORTED"; badge.className = "badge badge-amber"; }
+      return;
     }
+    if (!res.ok) throw new Error(data.detail || data.message || await apiErrorMessage(res));
+    if (!data.c_code) throw new Error("backend returned an empty source payload");
     output.textContent = data.c_code || "No source emitted.";
     if (status) status.textContent = `sched_ext struct_ops C source generated successfully from active PolicyLang IR.`;
     if (badge) {
@@ -504,11 +509,16 @@ async function runPhase3Repair() {
 
     // Render concrete diff
     if (diffBox) {
-      if (repair.source && repair.source !== source) {
+      if (repair.success && repair.source && repair.source !== source) {
         diffBox.innerHTML = generateSimpleDiff(source, repair.source);
         diffBox.classList.remove("hidden");
+      } else if (repair.success) {
+        diffBox.innerHTML = '<div class="diff-line-same">Policy already satisfies every declared guarantee; no source modification was necessary.</div>';
+        diffBox.classList.remove("hidden");
       } else {
-        diffBox.innerHTML = '<div class="diff-line-same">No source modifications were necessary. Policy satisfies declared guarantees.</div>';
+        const last = (repair.iterations || [])[repair.iterations?.length - 1] || {};
+        const reason = last.message || "No verified repair was produced.";
+        diffBox.innerHTML = `<div class="diff-line-removed">Repair not accepted: ${phase3Escape(reason)}. The original source is preserved.</div>`;
         diffBox.classList.remove("hidden");
       }
     }
@@ -520,7 +530,8 @@ async function runPhase3Repair() {
       status.textContent = "Verified repair reached: all guarantees mathematically proven safe by Z3 SMT solver.";
       status.className = "phase3-status status-success";
     } else {
-      status.textContent = "Bounded repair loop completed without reaching verified status across all guarantees.";
+      const last = (repair.iterations || [])[repair.iterations?.length - 1] || {};
+      status.textContent = `Repair not accepted: ${last.message || "bounded loop did not reach VERIFIED"}. Original source preserved.`;
       status.className = "phase3-status status-warning";
     }
   } catch (err) {
@@ -615,9 +626,17 @@ function initEditor() {
   const exampleSelect = document.getElementById("editorExampleSelect");
   if (exampleSelect) {
     exampleSelect.addEventListener("change", (e) => {
-      loadExample(e.target.value);
+      const selected = appState.examples[e.target.value];
+      const description = document.getElementById("editorExampleDescription");
+      if (description) description.textContent = selected?.description || "Select a case, then click Load Example.";
+      setEditorPolicyState(selected ? `Demo selected — ${selected.filename}` : "Choose a demo policy", false);
     });
   }
+  document.getElementById("editorLoadExampleBtn")?.addEventListener("click", async () => {
+    const selected = document.getElementById("editorExampleSelect")?.value;
+    if (!selected) return;
+    await loadExample(selected, false);
+  });
   const verifExampleSelect = document.getElementById("verifExampleSelect");
   if (verifExampleSelect) {
     verifExampleSelect.addEventListener("change", (e) => {
@@ -657,12 +676,22 @@ async function loadExamples() {
     (data.examples || []).forEach(ex => {
       appState.examples[ex.name] = ex;
     });
+    const select = document.getElementById("editorExampleSelect");
+    if (select) {
+      select.innerHTML = '<option value="">Choose a demo policy…</option>';
+      (data.examples || []).forEach(ex => {
+        const option = document.createElement("option");
+        option.value = ex.name;
+        option.textContent = ex.demo_id ? `${ex.demo_id} — ${ex.description}` : `${ex.filename} — ${ex.description}`;
+        select.appendChild(option);
+      });
+    }
   } catch (err) {
     console.error("Failed to load examples", err);
   }
 }
 
-async function loadExample(name) {
+async function loadExample(name, run = true) {
   if (appState.examples[name]) {
     const ex = appState.examples[name];
     const editor = document.getElementById("mainCodeEditor");
@@ -675,7 +704,9 @@ async function loadExample(name) {
         const lines = ex.code.split("\n").length;
         gutter.innerHTML = Array.from({ length: lines }, (_, i) => i + 1).join("\n");
       }
-      await executeCompileAndRun();
+      const description = document.getElementById("editorExampleDescription");
+      if (description) description.textContent = ex.description || "Built-in demo policy.";
+      if (run) await executeCompileAndRun();
     }
   }
 }
@@ -1022,17 +1053,23 @@ function initPolicyAssistant() {
   }
 
   if (generateBtn) {
-    generateBtn.addEventListener("click", handleAssistantGenerate);
+    generateBtn.addEventListener("click", () => handleAssistantGenerate());
   }
+
+  document.getElementById("assistantClarificationSubmit")?.addEventListener("click", handleAssistantClarificationSubmit);
+  document.getElementById("assistantClarificationCancel")?.addEventListener("click", handleAssistantClarificationCancel);
+  document.getElementById("assistantClarificationAnswer")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") handleAssistantClarificationSubmit();
+  });
 
   if (insertBtn) {
     insertBtn.addEventListener("click", handleAssistantInsert);
   }
 }
 
-async function handleAssistantGenerate() {
+async function handleAssistantGenerate(promptOverride = null, clarificationAnswer = null) {
   const promptEl = document.getElementById("assistantPrompt");
-  const prompt = promptEl ? promptEl.value.trim() : "";
+  const prompt = (promptOverride ?? (promptEl ? promptEl.value : "")).trim();
   if (!prompt) {
     alert("Please enter a scheduling objective first.");
     return;
@@ -1053,64 +1090,68 @@ async function handleAssistantGenerate() {
   const rationaleEl = document.getElementById("assistantRationale");
   const codeEl = document.getElementById("assistantCodeOutput");
   const insertBtn = document.getElementById("assistantInsertBtn");
+  const clarificationBox = document.getElementById("assistantClarificationBox");
+  const clarificationQuestion = document.getElementById("assistantClarificationQuestion");
+  const clarificationError = document.getElementById("assistantClarificationError");
 
   try {
-    const res = await fetch("/api/generate", {
+    const res = await fetch("/api/synthesize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, provider }),
+      body: JSON.stringify({ prompt, provider, repair: true, clarification_answer: clarificationAnswer }),
     });
 
     if (!res.ok) throw new Error(await apiErrorMessage(res));
     const data = await res.json();
+    const proposal = data.proposal || data;
+    const repair = data.repair || null;
+    const candidateSource = data.source || proposal.source_code || "";
+    const lastIteration = repair?.iterations?.[repair.iterations.length - 1];
+    const verifiedByWorkflow = proposal.guarantee_status || lastIteration?.status || "NOT_RUN";
+    const needsClarification = proposal.intent_status === "CLARIFICATION_REQUIRED";
+
+    appState.pendingAssistantClarification = needsClarification ? { originalPrompt: prompt } : null;
+    if (clarificationBox) clarificationBox.classList.toggle("hidden", !needsClarification);
+    if (clarificationQuestion) clarificationQuestion.textContent = proposal.clarification_question ||
+      proposal.intent?.clarifications?.[0] || "Please provide the missing scheduling constraint to continue.";
+    if (clarificationError) {
+      clarificationError.textContent = "";
+      clarificationError.classList.add("hidden");
+    }
 
     if (resultBox) resultBox.classList.remove("hidden");
     if (statusBadge) {
-      statusBadge.textContent = data.proposal_status || data.status || "UNKNOWN";
-      statusBadge.className = `badge ${data.proposal_status === "PROPOSAL_GENERATED" ? "badge-green" : "badge-amber"}`;
+      statusBadge.textContent = proposal.proposal_status || proposal.status || "UNKNOWN";
+      statusBadge.className = `badge ${proposal.proposal_status === "PROPOSAL_GENERATED" ? "badge-green" : "badge-amber"}`;
     }
     if (consistencyBadge) {
-      const cStatus = data.consistency_status || "UNKNOWN";
+      const cStatus = proposal.consistency_status || "UNKNOWN";
       consistencyBadge.textContent = `Consistency: ${cStatus}`;
       consistencyBadge.className = `badge ${cStatus === "MATCH" ? "badge-green" : (cStatus === "MISMATCH" ? "badge-red" : "badge-neutral")}`;
     }
     if (compilationBadge) {
-      const compStatus = data.compilation_status || "UNKNOWN";
+      const compStatus = proposal.compilation_status || "UNKNOWN";
       compilationBadge.textContent = `Compilation: ${compStatus}`;
       compilationBadge.className = `badge ${compStatus === "COMPILATION_SUCCESS" ? "badge-green" : (compStatus === "COMPILATION_FAILED" ? "badge-red" : "badge-neutral")}`;
     }
     if (rationaleEl) {
-      rationaleEl.textContent = data.rationale || "";
-      if (data.consistency_errors && data.consistency_errors.length) {
-        rationaleEl.textContent += " Errors: " + data.consistency_errors.join(" ");
+      rationaleEl.textContent = proposal.rationale || "";
+      if (proposal.consistency_errors && proposal.consistency_errors.length) {
+        rationaleEl.textContent += " Diagnostics: " + proposal.consistency_errors.join(" ");
+      }
+      if (repair && !repair.success) {
+        rationaleEl.textContent += ` Formal correction: ${lastIteration?.message || "No verified candidate was found within the bounded correction budget."}`;
       }
     }
     if (codeEl) {
-      codeEl.textContent = data.source_code || "// No candidate policy generated for this objective.";
+      codeEl.textContent = candidateSource || "// No candidate policy generated for this objective.";
     }
 
-    const hasCode = Boolean(data.source_code && data.source_code.trim());
-    appState.pendingAiPolicy = hasCode ? data.source_code : null;
-    let formalStatus = "NOT_RUN";
-    if (hasCode && data.proposal_status === "PROPOSAL_GENERATED" &&
-        data.consistency_status === "MATCH" && data.compilation_status === "COMPILATION_SUCCESS") {
-      try {
-        const checkResponse = await fetch("/api/check", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source: data.source_code, replay: true }),
-        });
-        if (checkResponse.ok) {
-          const check = await checkResponse.json();
-          formalStatus = check.all_verified ? "VERIFIED" :
-            (check.has_violation ? "VIOLATED" : (check.has_unknown ? "UNKNOWN" : "NOT_RUN"));
-        } else {
-          formalStatus = "ERROR";
-        }
-      } catch (_) {
-        formalStatus = "ERROR";
-      }
-    }
+    const hasCode = Boolean(candidateSource && candidateSource.trim());
+    appState.pendingAiPolicy = hasCode ? candidateSource : null;
+    const formalStatus = verifiedByWorkflow === "VERIFIED" ? "VERIFIED" :
+      (verifiedByWorkflow === "VIOLATED" || lastIteration?.status === "BUDGET_EXHAUSTED" ? "VIOLATED" :
+       (verifiedByWorkflow === "UNKNOWN" ? "UNKNOWN" : "NOT_RUN"));
     if (guaranteeBadge) {
       guaranteeBadge.textContent = `Formal guarantees: ${formalStatus}`;
       guaranteeBadge.className = `badge ${formalStatus === "VERIFIED" ? "badge-green" : (formalStatus === "VIOLATED" || formalStatus === "ERROR" ? "badge-red" : "badge-amber")}`;
@@ -1128,6 +1169,8 @@ async function handleAssistantGenerate() {
     if (rationaleEl) rationaleEl.textContent = `${provider === "rules" ? "Policy Assistant failed" : "Live provider request BLOCKED"}: ${err.message}`;
     if (codeEl) codeEl.textContent = "// No candidate policy generated.";
     appState.pendingAiPolicy = null;
+    appState.pendingAssistantClarification = null;
+    if (clarificationBox) clarificationBox.classList.add("hidden");
     if (insertBtn) insertBtn.disabled = true;
   } finally {
     if (btn) {
@@ -1135,6 +1178,41 @@ async function handleAssistantGenerate() {
       btn.textContent = "Generate Policy Proposal";
     }
   }
+}
+
+function showAssistantClarificationError(message) {
+  const error = document.getElementById("assistantClarificationError");
+  if (!error) return;
+  error.textContent = message;
+  error.classList.remove("hidden");
+}
+
+async function handleAssistantClarificationSubmit() {
+  const pending = appState.pendingAssistantClarification;
+  const answerEl = document.getElementById("assistantClarificationAnswer");
+  if (!pending || !answerEl) return;
+  const answer = answerEl.value.trim();
+  const match = answer.match(/^(\d+(?:\.\d+)?)\s*(?:ms|milliseconds?)$/i);
+  if (!match || Number(match[1]) <= 0 || Number(match[1]) > 2147483647 || !Number.isInteger(Number(match[1]))) {
+    showAssistantClarificationError("Enter a positive whole-number bound in milliseconds, for example 400 ms.");
+    return;
+  }
+  const boundMs = Number(match[1]);
+  const prompt = pending.originalPrompt;
+  appState.pendingAssistantClarification = null;
+  if (answerEl) answerEl.value = "";
+  await handleAssistantGenerate(prompt, `${boundMs} ms`);
+}
+
+function handleAssistantClarificationCancel() {
+  if (!appState.pendingAssistantClarification) return;
+  appState.pendingAssistantClarification = null;
+  appState.pendingAiPolicy = null;
+  const box = document.getElementById("assistantClarificationBox");
+  if (box) box.classList.remove("hidden");
+  showAssistantClarificationError("Processing cancelled. No candidate was generated or verified; provide the missing bound to continue.");
+  const insertBtn = document.getElementById("assistantInsertBtn");
+  if (insertBtn) insertBtn.disabled = true;
 }
 
 function handleAssistantInsert() {
@@ -1227,6 +1305,10 @@ function renderVerificationView(runRecord) {
     } else {
       editorSummary.textContent = `${verdicts.length} guarantee${verdicts.length === 1 ? "" : "s"} evaluated — Run: ${runRecord.run_id || "current"}`;
     }
+  }
+  const editorProvenance = document.getElementById("editorVerifProvenance");
+  if (editorProvenance) {
+    editorProvenance.textContent = `Editor policy only · ${runRecord.policy_name || "editor_policy"} · Run ${runRecord.run_id || "current"}`;
   }
 
   const provBadge = document.getElementById("verifProvenanceBadge");
@@ -1387,6 +1469,10 @@ function renderVerificationStaleState(runRecord) {
   badge.textContent = "STALE";
   title.textContent = "Policy changed after this verification";
   desc.textContent = `Run ${runRecord?.run_id || "the previous run"} belongs to an older source version. Re-verify before using these results.`;
+  const editorProvenance = document.getElementById("editorVerifProvenance");
+  if (editorProvenance) {
+    editorProvenance.textContent = `Editor policy only · Run ${runRecord?.run_id || "previous"} · STALE after source edit`;
+  }
   cards.innerHTML = '<div class="empty-state-box verification-empty-state"><strong>Results are out of date.</strong><span>The editor source no longer matches the policy that produced the displayed evidence.</span><button class="btn btn-primary btn-sm" onclick="executeCompileAndRun()">Re-verify Current Policy</button></div>';
   facts.innerHTML = '<tr><td colspan="6" class="empty-cell">Facts hidden until the current policy is verified.</td></tr>';
   const pdf = document.getElementById("verifDownloadPdfBtn");

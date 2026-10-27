@@ -9,8 +9,8 @@ from .providers import OpenRouterProvider, ProviderFailure, sanitize_provider_me
 from .prompts import Prompt
 
 CLASS_ALIASES = {
-    "web": ("web", "interactive", "frontend", "front-end", "ui", "request", "latency"),
-    "batch": ("batch", "background", "worker", "computation", "long-running", "long running", "ml"),
+    "web": ("web", "interactive", "frontend", "front-end", "ui", "request", "latency", "latency-sensitive", "latency sensitive"),
+    "batch": ("batch", "background", "worker", "computation", "long-running", "long running", "ml", "queue"),
     "rt": ("real-time", "realtime", "audio", "sensor"),
 }
 
@@ -27,10 +27,14 @@ class SchedulingIntent:
     wait_requirements: dict[str, int] = field(default_factory=dict)
     min_share_requirements: dict[str, int] = field(default_factory=dict)
     requested_guarantees: list[str] = field(default_factory=list)
+    forbid_guarantees: bool = False
     tuning_requested: bool = False
+    forbid_aging: bool = False
     assumptions: list[str] = field(default_factory=list)
     unsupported: list[str] = field(default_factory=list)
     conflicts: list[str] = field(default_factory=list)
+    clarifications: list[str] = field(default_factory=list)
+    evidence: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def supported(self) -> bool:
@@ -45,8 +49,11 @@ class SchedulingIntent:
                 "wait_requirements": self.wait_requirements,
                 "min_share_requirements": self.min_share_requirements,
                 "requested_guarantees": self.requested_guarantees,
-                "tuning_requested": self.tuning_requested, "assumptions": self.assumptions,
-                "unsupported": self.unsupported, "conflicts": self.conflicts}
+                "forbid_guarantees": self.forbid_guarantees,
+                "tuning_requested": self.tuning_requested, "forbid_aging": self.forbid_aging,
+                "assumptions": self.assumptions, "unsupported": self.unsupported,
+                "conflicts": self.conflicts, "clarifications": self.clarifications,
+                "evidence": self.evidence}
 
 
 @dataclass
@@ -69,6 +76,7 @@ class ProposedPolicyResult:
     provider_error: str = ""
     provider_error_details: dict[str, Any] = field(default_factory=dict)
     attempts: list[dict[str, Any]] = field(default_factory=list)
+    clarification_question: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {"source_code": self.source_code, "provider": self.provider,
@@ -82,7 +90,8 @@ class ProposedPolicyResult:
                 "consistency_errors": self.consistency_errors,
                 "guarantee_status": self.guarantee_status, "provider_error": self.provider_error,
                 "provider_error_details": self.provider_error_details,
-                "attempts": self.attempts}
+                "attempts": self.attempts,
+                "clarification_question": self.clarification_question}
 
 
 def _mentioned_classes(text: str) -> list[str]:
@@ -96,6 +105,56 @@ def _mentioned_classes(text: str) -> list[str]:
 def _class_in_phrase(phrase: str) -> str | None:
     names = _mentioned_classes(phrase)
     return names[0] if len(names) == 1 else None
+
+
+def _last_class_in_context(text: str, classes: list[str]) -> str | None:
+    """Resolve pronouns such as ``them`` from the nearest named workload."""
+    matches = [(text.rfind(alias), name) for name, aliases in CLASS_ALIASES.items()
+               for alias in aliases if text.rfind(alias) >= 0 and name in classes]
+    return max(matches)[1] if matches else None
+
+
+_NUMBER_WORDS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+    "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+}
+
+
+def _number_value(value: str) -> float | None:
+    value = value.strip().lower().replace("-", " ")
+    if re.fullmatch(r"\d+(?:\.\d+)?", value):
+        return float(value)
+    if value == "four hundred":
+        return 400.0
+    parts = value.split()
+    if len(parts) == 2 and parts[0] in _NUMBER_WORDS and parts[1] == "hundred":
+        return float(_NUMBER_WORDS[parts[0]] * 100)
+    if len(parts) == 2 and all(part in _NUMBER_WORDS for part in parts):
+        return float(sum(_NUMBER_WORDS[part] for part in parts))
+    return _NUMBER_WORDS.get(value)
+
+
+def _duration_spans(text: str):
+    """Yield normalized millisecond durations from numeric or common word forms."""
+    pattern = re.compile(
+        r"(?P<value>\d+(?:\.\d+)?|(?:four|three|two|one|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[- ]hundred|[- ](?:one|two|three|four|five|six|seven|eight|nine))?)\s*"
+        r"(?P<unit>milliseconds?|ms|seconds?|secs?|s)\b",
+        re.I,
+    )
+    for match in pattern.finditer(text):
+        number = _number_value(match.group("value"))
+        if number is None:
+            continue
+        unit = match.group("unit").lower()
+        milliseconds = number if unit in {"ms", "millisecond", "milliseconds"} else number * 1000
+        if milliseconds.is_integer():
+            yield match, int(milliseconds)
+
+
+def _record_evidence(intent: SchedulingIntent, kind: str, value: Any, clause: str) -> None:
+    intent.evidence.append({"kind": kind, "value": value, "clause": clause.strip()})
 
 
 def _add_order(order: list[str], high: str, low: str, conflicts: list[str], label: str) -> None:
@@ -176,19 +235,41 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
     intent = SchedulingIntent(classes=_mentioned_classes(lower))
 
     priority_patterns = [
-        r"(?:(?:priorit(?:ize|ise)|prefer|favor|favour)\s+|(?:and\s+(?:priorit(?:ize|ise)|prefer|favor|favour)\s+)|(?:and\s+))(?P<high>(?:(?!and\b)[^,.;])+?)\s+(?:over|above|ahead of)\s+(?P<low>(?:(?!and\b)[^,.;])+?)(?=\s+and\s+|(?:[,.;]|$))",
+        r"(?:(?:priorit(?:ize|ise)s?|prefer|favor|favour)\s+|(?:and\s+(?:priorit(?:ize|ise)s?|prefer|favor|favour)\s+)|(?:and\s+))(?P<high>(?:(?!and\b)[^,.;])+?)\s+(?:over|above|ahead of)\s+(?P<low>(?:(?!and\b)[^,.;])+?)(?=\s+and\s+|(?:[,.;]|$))",
         r"(?P<high>[^.;]+?)\s+(?:(?:must\s+)?(?:have|has)|(?:must\s+be|is|are))\s+(?:strict\s+)?higher\s+priority\s+than\s+(?P<low>[^,.;]+?)(?=\s+and\s+[^,.;]+?\s+(?:(?:must\s+)?(?:have|has)|is|are)|[,.;]|$)",
+        r"(?:give|make|set)\s+(?P<high>[^,.;]+?)\s+higher\s+priority\s+than\s+(?P<low>[^,.;]+)",
     ]
     for pattern in priority_patterns:
         for match in re.finditer(pattern, lower):
             high, low = _class_in_phrase(match.group("high")), _class_in_phrase(match.group("low"))
             if high and low:
                 _add_priority_relation(intent, high, low)
-    for match in re.finditer(r"(?:priorit(?:ize|ise)|prefer|favor|favour)\s+(?P<high>[^,.]+?)(?:\s+and\b|[,.;]|$)", lower):
+    for match in re.finditer(r"(?:priorit(?:ize|ise)s?|prefer|favor|favour)\s+(?P<high>[^,.]+?)(?:\s+and\b|[,.;]|$)", lower):
         high = _class_in_phrase(match.group("high"))
         others = [name for name in intent.classes if name != high]
         if high and len(others) == 1:
             _add_priority_relation(intent, high, others[0])
+
+    # Conversational priority statements often describe the action rather than
+    # using the literal "prioritize X over Y" form.  These patterns extract a
+    # semantic relation from the clause shape, independent of sentence order.
+    conversational_priority = [
+        r"(?P<high>[^,.;]+?)\s+(?:should\s+)?(?:run|go|come)\s+ahead\s+of\s+(?P<low>[^,.;]+)",
+        r"(?P<high>[^,.;]+?)\s+(?:should\s+)?(?:take|has|have)\s+(?:precedence|priority)\s+(?:over|than)\s+(?P<low>[^,.;]+)",
+        r"(?:keep|make)\s+(?P<high>[^,.;]+?)\s+(?:responsive|snappy)\b[^.]*?(?:but|while|without)[^,.;]*?(?P<low>background|batch|worker)[^,.;]*",
+        r"(?:favor|favour)\s+(?P<high>[^,.;]+?)(?:\s+without|\s+while|\s+but)\s+(?P<low>[^,.;]+)",
+    ]
+    for pattern in conversational_priority:
+        for match in re.finditer(pattern, lower):
+            high, low = _class_in_phrase(match.group("high")), _class_in_phrase(match.group("low"))
+            if high and low:
+                _add_priority_relation(intent, high, low)
+    if len(intent.classes) == 2 and not intent.priority_order:
+        if re.search(r"\b(?:responsive|snappy|latency-sensitive|latency sensitive)\b", lower) and re.search(r"\b(?:background|batch|worker|neglect|stuck|starv)", lower):
+            high = "web" if "web" in intent.classes else _class_in_phrase(lower)
+            low = "batch" if "batch" in intent.classes else _last_class_in_context(lower, intent.classes)
+            if high and low and high != low:
+                _add_priority_relation(intent, high, low)
 
     for match in re.finditer(r"(?P<name>[\w -]+?)\s+(?:at\s+)?priority\s+(?P<value>\d+)", lower):
         name = _class_in_phrase(match.group("name"))
@@ -199,15 +280,15 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
             intent.priority_values[name] = value
 
     quantum_patterns = [
-        r"(?:give|make|let)\s+(?P<long>.+?)\s+(?:a\s+)?longer\s+(?:time\s+)?quantum\s+than\s+(?P<short>.+?)(?=\s+and\s+(?:give|make|let)|;|\.|$)",
-        r"(?P<long>.+?)\s+(?:time\s+)?quantum\s+(?:is|be)\s+longer\s+than\s+(?P<short>.+?)(?=\s+and\s+(?:give|make|let)|;|\.|$)",
+        r"(?:give|make|let)s?\s+(?P<long>.+?)\s+(?:a\s+)?longer\s+(?:time\s+)?quantum\s+than\s+(?P<short>.+?)(?=\s+and\s+(?:give|make|let)s?|;|\.|$)",
+        r"(?P<long>.+?)\s+(?:time\s+)?quantum\s+(?:is|be)\s+longer\s+than\s+(?P<short>.+?)(?=\s+and\s+(?:give|make|let)s?|;|\.|$)",
     ]
     for pattern in quantum_patterns:
         for match in re.finditer(pattern, lower):
             long_name, short_name = _class_in_phrase(match.group("long")), _class_in_phrase(match.group("short"))
             if long_name and short_name:
                 _add_order(intent.quantum_order, long_name, short_name, intent.conflicts, "quantum")
-    for match in re.finditer(r"(?:give|make|let)\s+(?P<long>[^,.]+?)\s+(?:a\s+)?longer\s+(?:time\s+)?quantum(?:\s+than\s+(?P<short>[^,.]+))?", lower):
+    for match in re.finditer(r"(?:give|make|let)s?\s+(?P<long>[^,.]+?)\s+(?:a\s+)?longer\s+(?:time\s+)?quantum(?:\s+than\s+(?P<short>[^,.]+))?", lower):
         long_name = _class_in_phrase(match.group("long"))
         short_name = _class_in_phrase(match.groupdict().get("short") or "")
         if long_name and not short_name:
@@ -216,6 +297,15 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
                 short_name = others[0]
         if long_name and short_name:
             _add_order(intent.quantum_order, long_name, short_name, intent.conflicts, "quantum")
+    for match in re.finditer(
+        r"(?P<long>[^,.;]+?)\s+(?:can use|should get|need|have)\s+(?:a\s+)?(?:bigger|larger|longer)\s+(?:execution\s+)?(?:time\s+)?(?:slices?|quanta|quantum)",
+        lower,
+    ):
+        long_name = _class_in_phrase(match.group("long"))
+        if long_name:
+            others = [name for name in intent.classes if name != long_name]
+            if len(others) == 1:
+                _add_order(intent.quantum_order, long_name, others[0], intent.conflicts, "quantum")
 
     for match in re.finditer(r"(?P<phrase>[^.;,]+?)\bquantum\s*(?:of|=|at|is|be)?\s*(?P<value>\d+)\s*(?:ms|milliseconds)", lower):
         name = _class_in_phrase(match.group("phrase"))
@@ -242,6 +332,23 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
         name = _class_in_phrase(match.group("phrase"))
         if name:
             intent.quantum_values[name] = int(match.group("value"))
+    for match in re.finditer(
+        r"(?P<long>[^,.;]+?)\s+(?:can use|should get|need|have)\s+(?:a\s+)?(?:bigger|larger|longer)\s+(?:execution\s+)?(?:time\s+)?slices?\s+than\s+(?P<short>[^,.;]+)",
+        lower,
+    ):
+        long_name, short_name = _class_in_phrase(match.group("long")), _class_in_phrase(match.group("short"))
+        if long_name and short_name:
+            _add_order(intent.quantum_order, long_name, short_name, intent.conflicts, "quantum")
+    for match in re.finditer(
+        r"(?P<long>[^,.;]+?)\s+(?:quantum|time\s+slices?)\s+(?:should\s+)?(?:be\s+)?longer\s+than\s+(?P<short>[^,.;]+?)(?:\s+(?:quantum|time\s+slices?))?(?=[.;,]|$)",
+        lower,
+    ):
+        long_name = _class_in_phrase(match.group("long"))
+        if not long_name:
+            long_name = _last_class_in_context(lower[:match.start()], intent.classes)
+        short_name = _class_in_phrase(match.group("short"))
+        if long_name and short_name:
+            _add_order(intent.quantum_order, long_name, short_name, intent.conflicts, "quantum")
     for match in re.finditer(r"(?P<phrase>[^.;,]+?)\baging\s*(?:of|=|at|is|be)?\s*(?P<value>\d+)\s*(?:ms|milliseconds)", lower):
         name = _class_in_phrase(match.group("phrase"))
         if name:
@@ -273,6 +380,9 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
         r"(?P<target>[^.;,]+?)\s+(?:maximum|max)\s+(?:waiting[- ]time|wait)\s+(?:is\s+)?(?:no\s+more\s+than|at\s+most|less\s+than|of|=)\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
         r"(?:maximum|max)\s+(?:waiting[- ]time|wait)\s+for\s+(?P<target>[^.;,]+?)\s+(?:is\s+)?(?:no\s+more\s+than|at\s+most|less\s+than|of|=)\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
         r"(?:maximum|max)\s+(?:waiting[- ]time|wait)\s+(?:requirement|bound)?\s*(?:of|=)?\s*(?P<value>\d+)\s*(?:ms|milliseconds)(?:\s+for\s+(?P<target>[^.;,]+))?",
+        r"(?P<target>[^.;,]+?)\s+(?:should\s+)?(?:get|have)\s+a\s+chance\s+to\s+run\s+within\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
+        r"(?:none|no one)\s+of\s+(?:them|those\s+tasks)\s+(?:should\s+)?wait\s+(?:longer|more)\s+than\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
+        r"(?:prevent|avoid|stop)\s+(?P<target>[^.;,]+?)\s+from\s+waiting\s+(?:longer|more)\s+than\s+(?P<value>\d+)\s*(?:ms|milliseconds)",
     ]
     for pattern in wait_patterns:
         for match in re.finditer(pattern, lower):
@@ -287,14 +397,53 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
             if target:
                 intent.wait_requirements[target] = int(match.group("value"))
             else:
-                if not intent.wait_requirements:
+                context = lower[max(0, match.start() - 100):match.start()]
+                pronoun_context = f"{context} {match.group(0)}"
+                if re.search(r"\b(?:them|they|those\s+tasks|background\s+jobs|batch\s+jobs)\b", pronoun_context):
+                    target = _last_class_in_context(context, intent.classes)
+                if target:
+                    intent.wait_requirements[target] = int(match.group("value"))
+                elif not intent.wait_requirements:
                     intent.unsupported.append("A maximum wait requirement needs one explicit target class.")
+
+    # Normalize equivalent wait language compositionally.  The target is
+    # resolved from the same local clause as the duration, so phrases such as
+    # "background jobs get CPU time within 0.4 seconds" retain both the class
+    # and the exact numerical requirement.
+    for duration_match, milliseconds in _duration_spans(lower):
+        context = lower[max(0, duration_match.start() - 120):duration_match.end() + 40]
+        if not re.search(
+            r"\b(?:wait|waiting|dispatch|cpu\s+time|cpu\s+turn|chance\s+to\s+run|run\s+within|scheduled|queue|starv)\b",
+            context,
+        ):
+            continue
+        target = None
+        after = lower[duration_match.end():duration_match.end() + 80]
+        for_match = re.search(r"\bfor\s+(?P<target>[^,.;]+)", after)
+        if for_match:
+            target = _class_in_phrase(for_match.group("target"))
+        if not target:
+            target = _class_in_phrase(context)
+        if not target:
+            target = _last_class_in_context(context, intent.classes)
+        if target and not re.search(r"\bmaximum\s+waiting\s+time\s+is\b", context):
+            intent.wait_requirements[target] = milliseconds
+            _record_evidence(intent, "max_wait_ms", milliseconds, context)
 
     for match in re.finditer(r"(?P<target>[^.;,]+?)\s+(?:must have|needs|require)\s+(?P<value>\d+)\s*%\s*(?:minimum\s+)?(?:cpu\s+)?share", lower):
         target = _class_in_phrase(match.group("target"))
         if target:
             intent.min_share_requirements[target] = int(match.group("value"))
     has_starvation_req = bool(re.search(r"\bno[- ]starvation\b|\b(?:prevent|avoid|stop)\s+(?:\w+\s+)?starvation\b", lower))
+    qualitative_starvation = bool(re.search(
+        r"\b(?:cannot|can't|can\s+not|must\s+not|should\s+not|don't|do\s+not)\s+(?:be\s+)?(?:starve|starved|neglected|left\s+waiting|stuck)\b|\b(?:not|without)\s+(?:allowing|letting)\s+[^.]*?(?:starv|neglect|wait indefinitely)",
+        lower,
+    ))
+    qualitative_fairness = bool(re.search(
+        r"\b(?:prevent|avoid|stop|don't\s+let|do\s+not\s+let)\s+[^.]*\b(?:neglect\w*|starv\w*|left\s+waiting|stuck)\b",
+        lower,
+    ))
+    has_starvation_req = has_starvation_req or qualitative_starvation or qualitative_fairness
     if has_starvation_req:
         intent.requested_guarantees.append("no_starvation")
         if not intent.wait_requirements:
@@ -302,6 +451,23 @@ def extract_intent(prompt_text: str) -> SchedulingIntent:
                 "No-starvation was requested, but PolicyLang requires an explicit maximum wait bound "
                 "for a verifiable no_starvation guarantee."
             )
+            intent.clarifications.append("Provide an explicit maximum wait bound, for example 400 ms.")
+    intent.forbid_guarantees = bool(re.search(
+        r"\b(?:do\s+not|don't|dont|without|with\s+no)\s+(?:add\s+)?(?:any\s+)?formal\s+guarantees?\b|\bno\s+formal\s+guarantees?\b",
+        lower,
+    ))
+    intent.forbid_aging = bool(re.search(
+        r"\b(?:do\s+not|don't|dont|never|without)\s+(?:use|add|apply|allow|promote|enable)?\s*(?:any\s+)?(?:aging|promotion)\b",
+        lower,
+    ))
+    if intent.forbid_aging:
+        intent.assumptions.append("Aging or promotion was explicitly prohibited by the request.")
+        if intent.wait_requirements:
+            intent.clarifications.append("The requested maximum wait may be infeasible without aging under the current policy model.")
+    if intent.forbid_guarantees:
+        intent.assumptions.append("Formal guarantees were explicitly excluded by the request.")
+        if intent.requested_guarantees or intent.wait_requirements or intent.min_share_requirements:
+            intent.conflicts.append("The request both requires and forbids formal guarantees.")
     intent.tuning_requested = bool(re.search(r"\b(?:tune|tuning|optimi[sz]e|sweep|range)\b", lower))
 
     if not intent.classes and not (intent.priority_order or intent.quantum_order):
@@ -350,13 +516,17 @@ def _policy_source(intent: SchedulingIntent, prompt_text: str) -> tuple[str, lis
         intent.assumptions.append("Quantum values were not specified; class defaults were applied.")
 
     aging_values = dict(intent.aging_values)
-    for name, bound in intent.wait_requirements.items():
-        if name not in aging_values:
-            aging_values[name] = max(50, min(200, bound // 2))
-            intent.assumptions.append(f"Aging {aging_values[name]}ms was added for {name} to support its {bound}ms wait requirement.")
+    if not intent.forbid_aging:
+        for name, bound in intent.wait_requirements.items():
+            if name not in aging_values:
+                aging_values[name] = max(50, min(200, bound // 2))
+                intent.assumptions.append(f"Aging {aging_values[name]}ms was added for {name} to support its {bound}ms wait requirement.")
 
-    guarantees = [f"  guarantee no_starvation({name}, {bound} ms);" for name, bound in intent.wait_requirements.items()]
-    guarantees += [f"  guarantee min_share({name}, {share} %);" for name, share in intent.min_share_requirements.items()]
+    guarantees = [] if intent.forbid_guarantees else [
+        f"  guarantee no_starvation({name}, {bound} ms);" for name, bound in intent.wait_requirements.items()
+    ]
+    if not intent.forbid_guarantees:
+        guarantees += [f"  guarantee min_share({name}, {share} %);" for name, share in intent.min_share_requirements.items()]
     adaptations = []
     if intent.tuning_requested:
         adaptations = [f"  adapt {name}.aging in 50ms..{max(300, aging * 2)}ms;" for name, aging in aging_values.items()]
@@ -392,6 +562,8 @@ def check_intent_consistency(intent: SchedulingIntent, source_code: str) -> tupl
     result = compile_source(source_code)
     if not result.ok or result.ir is None:
         return "MISMATCH", [str(d) for d in result.diagnostics], "COMPILATION_FAILED"
+    if intent.conflicts:
+        return "CONFLICTING_REQUIREMENTS", list(intent.conflicts), "COMPILATION_SUCCESS"
     errors = []
     by_name = {c.name: c for c in result.ir.classes}
     missing_classes = [name for name in intent.classes if name not in by_name]
@@ -414,6 +586,8 @@ def check_intent_consistency(intent: SchedulingIntent, source_code: str) -> tupl
     for name, value in intent.aging_values.items():
         if name in by_name and by_name[name].aging_ms != value:
             errors.append(f"{name} aging is {by_name[name].aging_ms}ms, requested {value}ms.")
+    if intent.forbid_aging and any(c.aging_ms for c in result.ir.classes):
+        errors.append("Aging or promotion was explicitly prohibited, but the candidate enables it.")
     guarantees = {(g.kind, g.cls_name, g.value) for g in result.ir.guarantees}
     for name, value in intent.wait_requirements.items():
         if ("no_starvation", name, value) not in guarantees:
@@ -421,19 +595,32 @@ def check_intent_consistency(intent: SchedulingIntent, source_code: str) -> tupl
     for name, value in intent.min_share_requirements.items():
         if ("min_share", name, value) not in guarantees:
             errors.append(f"Missing min_share({name}, {value}%) guarantee.")
+    if intent.forbid_guarantees and result.ir.guarantees:
+        errors.append("Formal guarantees were explicitly excluded from the request, but the candidate declared one.")
     return ("MATCH" if not errors else "MISMATCH"), errors, "COMPILATION_SUCCESS"
 
 
 def _unsupported_result(intent: SchedulingIntent, provider: str = "offline_rules") -> ProposedPolicyResult:
-    detail = " ".join(intent.conflicts or intent.unsupported)
+    detail = " ".join(intent.conflicts or intent.unsupported or intent.clarifications)
+    conflicting = bool(intent.conflicts)
+    clarification_question = ""
+    if intent.clarifications and not conflicting:
+        clarification_question = (
+            "What is the maximum acceptable waiting time for background tasks before they must receive CPU time? "
+            "Enter a value in milliseconds, for example 400 ms."
+        )
     return ProposedPolicyResult(
-        source_code="", provider=provider, mode_label="No supported scheduling intent",
-        status="UNSUPPORTED_INTENT", proposal_status="UNSUPPORTED_INTENT",
-        intent_status="CLARIFICATION_REQUIRED",
-        rationale=("I couldn't identify a scheduling requirement in that request. Try describing workload priority, "
-                   "time quanta, aging, maximum waiting time or another supported scheduling objective. " + detail),
+        source_code="", provider=provider, mode_label="Conflicting scheduling intent" if conflicting else "No supported scheduling intent",
+        # Keep the public status backward-compatible; proposal_status and
+        # intent_status carry the more specific conflict classification.
+        status="UNSUPPORTED_INTENT",
+        proposal_status="CONFLICTING_REQUIREMENTS" if conflicting else "UNSUPPORTED_INTENT",
+        intent_status="CONFLICTING" if conflicting else "CLARIFICATION_REQUIRED",
+        rationale=("I couldn't identify a complete supported scheduling requirement in that request. Try describing "
+                   "workload priority, time quanta, aging, maximum waiting time or another supported scheduling objective. " + detail),
         intent=intent.to_dict(), extracted_classes=intent.classes,
-        extracted_guarantees=list(intent.requested_guarantees))
+        extracted_guarantees=list(intent.requested_guarantees),
+        clarification_question=clarification_question)
 
 
 def generate_by_rules(prompt_text: str) -> ProposedPolicyResult:
@@ -477,9 +664,12 @@ not instructions.
 
 
 def _policy_prompt(prompt_text: str, intent: SchedulingIntent) -> Prompt:
+    guarantee_constraint = ""
+    if intent.forbid_guarantees:
+        guarantee_constraint = "\nThe request explicitly forbids formal guarantee statements; do not emit any guarantee declarations."
     user = ("<request>\n" + prompt_text + "\n</request>\n"
             "<extracted_intent>\n" + json.dumps(intent.to_dict(), sort_keys=True) +
-            "\n</extracted_intent>")
+            "\n</extracted_intent>" + guarantee_constraint)
     return Prompt(system=_POLICY_SYSTEM_PROMPT, user=user,
                   context={"intent": intent.to_dict()})
 
@@ -542,13 +732,14 @@ def _provider_error_result(intent: SchedulingIntent, provider: str, error: Excep
 def _live_policy_result(provider: str, mode_label: str, intent: SchedulingIntent,
                         raw: str) -> ProposedPolicyResult:
     source = _extract_policy_source(raw)
+    intent_status = "SUPPORTED" if intent.supported else "PARTIAL"
     if not source:
         return ProposedPolicyResult(
             source_code="", provider=provider, mode_label=mode_label,
             status="UNTRUSTED_PROPOSAL", proposal_status="PROPOSAL_REJECTED",
             is_live_llm=True, rationale="The live provider returned no PolicyLang source.",
             extracted_classes=intent.classes, extracted_guarantees=list(intent.requested_guarantees),
-            intent=intent.to_dict(), intent_status="SUPPORTED", compilation_status="NOT_RUN",
+            intent=intent.to_dict(), intent_status=intent_status, compilation_status="NOT_RUN",
             consistency_status="NOT_RUN", consistency_errors=["Provider returned empty policy output."],
         )
     try:
@@ -562,7 +753,7 @@ def _live_policy_result(provider: str, mode_label: str, intent: SchedulingIntent
         source_code=source, provider=provider, mode_label=mode_label,
         status="UNTRUSTED_PROPOSAL", proposal_status=("PROPOSAL_GENERATED" if consistency == "MATCH" else "PROPOSAL_REJECTED"),
         is_live_llm=True, rationale="Live LLM candidate checked against extracted intent; acceptance remains verifier-authoritative.",
-        extracted_classes=intent.classes, intent=intent.to_dict(),
+        extracted_classes=intent.classes, intent=intent.to_dict(), intent_status=intent_status,
         extracted_guarantees=list(intent.requested_guarantees),
         compilation_status=compilation, consistency_status=consistency,
         consistency_errors=errors,
@@ -582,11 +773,20 @@ def _record_attempt(result: ProposedPolicyResult, number: int, model: str | None
 
 
 def propose_policy(prompt_text: str, provider_name: str = "rules") -> ProposedPolicyResult:
-    """Reject unsupported prompts before routing; validate live candidates too."""
+    """Route offline-supported intent directly and let explicit live providers interpret partial intent."""
     intent = extract_intent(prompt_text)
-    if not intent.supported:
-        return _unsupported_result(intent, provider=provider_name or "offline_rules")
     provider_name = (provider_name or "rules").lower()
+    if intent.conflicts:
+        # Contradictory user requirements are rejected before either provider
+        # can choose one side of the conflict and make it look acceptable.
+        return _unsupported_result(intent, provider=provider_name or "offline_rules")
+    # Offline rules must be honest about their finite contract.  An explicitly
+    # selected live provider, however, gets a chance to interpret ordinary
+    # language that the deterministic extractor only partially understands;
+    # its candidate remains untrusted and still passes compiler/consistency
+    # checks below.
+    if not intent.supported and provider_name not in {"openrouter", "anthropic"}:
+        return _unsupported_result(intent, provider=provider_name or "offline_rules")
     if provider_name in {"rules", "stub"}:
         return generate_by_rules(prompt_text)
     if provider_name == "openrouter":

@@ -57,6 +57,19 @@ def test_phase4_single_class_uses_configured_quantum_in_enqueue():
     assert "scx_bpf_dsq_insert(p, sg_dsq(class_id), sg_classes[class_id].quantum_ns" in result.c_code
 
 
+def test_phase4_single_class_covers_default_select_and_fallback_quantum_paths():
+    ir = _single_class_ir()
+    result = emit_ebpf_c(ir)
+    source = result.c_code
+    assert "BPF_STRUCT_OPS(sg_select_cpu" in source
+    assert "scx_bpf_select_cpu_dfl(p, prev_cpu, wake_flags, &direct)" in source
+    assert "scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, sg_classes[0].quantum_ns, 0)" in source
+    assert "scx_bpf_dsq_insert(p, SCX_DSQ_GLOBAL, sg_classes[0].quantum_ns, enq_flags)" in source
+    assert ".select_cpu = (void *)sg_select_cpu" in source
+    assert ".flags = SCX_OPS_ENQ_LAST | SCX_OPS_ENQ_EXITING" in source
+    assert "SCX_SLICE_DFL" not in source
+
+
 def test_phase4_multiclass_rejection_mentions_required_control_plane():
     ir = compile_file("examples/balanced.sched").ir
     with pytest.raises(ValueError) as exc:
