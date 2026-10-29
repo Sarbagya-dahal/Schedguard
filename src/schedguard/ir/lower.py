@@ -13,4 +13,5 @@ def lower(ast: PolicyAST) -> IRPolicy:
     guarantees = tuple(IRGuarantee(g.kind, index[g.cls], g.cls, g.value) for g in ast.guarantees)
     adaptations = tuple(IRAdaptation(index[a.cls], a.cls, a.param, a.min_val, a.max_val)
                         for a in getattr(ast, "adaptations", []) if a.cls in index)
-    return IRPolicy(ast.name, classes, guarantees, ast.max_tasks or DEFAULT_MAX_TASKS, adaptations)
+    return IRPolicy(ast.name, classes, guarantees, ast.max_tasks or DEFAULT_MAX_TASKS, adaptations,
+                    getattr(ast, "sched_ext_map", None))

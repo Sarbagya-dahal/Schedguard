@@ -786,6 +786,8 @@ def api_examples():
         "balanced": "Same-tier classes: shares follow quanta round-robin without starvation.",
         "three_tier": "Three tiers with real-time, web, and slow ML aging.",
         "invalid_ranges": "Intentionally malformed ranges rejected by compiler safety pass.",
+        "repairable_tight_wait": "Tight but feasible repair: 230 ms initial bound is reduced to 200 ms by aging 20 ms.",
+        "sched_ext_multiclass_aging": "Opt-in multi-class sched_ext emission with kind-based task mapping and bounded aging promotion.",
     }
 
     for p in sorted(examples_dir.glob("*.sched")):
@@ -794,6 +796,8 @@ def api_examples():
             code = f.read()
         demo_id = {
             "aging_fix": "verified-aging-baseline",
+            "repairable_tight_wait": "repairable-tight-wait",
+            "sched_ext_multiclass_aging": "sched-ext-multiclass-aging",
         }.get(name)
         examples.append({
             "name": name,

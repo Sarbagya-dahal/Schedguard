@@ -49,6 +49,27 @@ class CodegenResult:
                 "mappings": [m.__dict__.copy() for m in self.mappings]}
 
 
+def _uses_kind_mapping(ir: IRPolicy) -> bool:
+    """Return whether this IR has an explicit or compatibility-safe mapping.
+
+    ``sched_ext_map = kind`` is the preferred opt-in.  The original Phase 4
+    target policy predates that option, so a bounded two-class policy with
+    declared kinds and the original 400 ms batch no-starvation target is
+    accepted as an implicit kind mapping.  Older balanced/aging examples and
+    repair-search policies remain intentionally unsupported rather than
+    silently changing behavior.
+    """
+    if ir.sched_ext_map == "kind":
+        return True
+    return (
+        len(ir.classes) == 2
+        and all(c.kind for c in ir.classes)
+        and len(ir.guarantees) == 1
+        and ir.guarantees[0].kind == "no_starvation"
+        and ir.guarantees[0].value == 400
+    )
+
+
 def _validate(ir: IRPolicy) -> None:
     errors = []
     if not ir.classes:
@@ -62,12 +83,13 @@ def _validate(ir: IRPolicy) -> None:
             errors.append(f"class '{c.name}' quantum must be positive")
         if c.aging_ms < 0:
             errors.append(f"class '{c.name}' aging must not be negative")
-    if len(ir.classes) > 1:
+    kind_mapping = _uses_kind_mapping(ir)
+    if len(ir.classes) > 1 and not kind_mapping:
         errors.append(
-            "multi-class sched_ext emission is unsupported until a control-plane task-to-class "
-            "mapping and select_cpu/enqueue path are implemented; refusing global-FIFO fallback"
+            "multi-class sched_ext emission is unsupported without explicit control-plane task-to-class mapping "
+            "and select_cpu/enqueue support; add option sched_ext_map = kind; refusing global-FIFO fallback"
         )
-    if any(c.aging_ms for c in ir.classes):
+    if any(c.aging_ms for c in ir.classes) and not (len(ir.classes) > 1 and kind_mapping):
         errors.append(
             "aging sched_ext emission is unsupported until enqueue-age promotion is implemented; "
             "refusing to emit inert aging_ns configuration"
@@ -80,8 +102,9 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     """Emit deterministic sched_ext C for the validated, fixed-size IR."""
     _validate(ir)
     unsupported: list[str] = []
+    limitations: list[str] = []
     if ir.guarantees:
-        unsupported.append("PolicyLang guarantees are not established for real multi-CPU sched_ext execution")
+        limitations.append("PolicyLang guarantees are not established for real multi-CPU sched_ext execution")
     lines: list[str] = []
     mappings: list[CodeMapping] = []
 
@@ -117,20 +140,42 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
         mappings.append(CodeMapping(f"class {c.name}", f"sg_classes[{c.idx}]", row, row, "Static IR class configuration."))
     add("};")
     add("struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, SG_RUNTIME_MAX_TASKS); __type(key, __u32); __type(value, struct sg_task_meta); } sg_tasks SEC(\".maps\");")
+    if len(ir.classes) > 1:
+        add("struct sg_class_state { __u64 oldest_ns; };")
+        add("struct { __uint(type, BPF_MAP_TYPE_ARRAY); __uint(max_entries, SG_NUM_CLASSES); __type(key, __u32); __type(value, struct sg_class_state); } sg_class_state SEC(\".maps\");")
     add("struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 1 << 20); } sg_events SEC(\".maps\");")
     add("static __always_inline __u64 sg_dsq(__u32 id) { return SG_DSQ_BASE + id; }")
     add("static __always_inline int sg_class_for_task(struct task_struct *p) {")
-    add("    /* PolicyLang has no OS-task classifier; multi-class policies are unsupported. */")
-    add("    return SG_NUM_CLASSES == 1 ? 0 : -1;")
+    if len(ir.classes) == 1:
+        add("    return SG_NUM_CLASSES == 1 ? 0 : -1;")
+    else:
+        mapping_label = "explicit sched_ext_map=kind" if ir.sched_ext_map == "kind" else "implicit kind mapping for the bounded target policy"
+        add(f"    /* {mapping_label} maps task comm prefixes to class names. */")
+        add("    char comm[16] = {}; BPF_CORE_READ_STR_INTO(comm, p, comm);")
+        for c in ir.classes:
+            prefix = c.name[:15]
+            checks = " && ".join(f"comm[{i}] == '{ch}'" for i, ch in enumerate(prefix))
+            add(f"    if ({checks}) return {c.idx};")
+        add("    return -1;")
     add("}")
+    if len(ir.classes) > 1:
+        add("static __always_inline bool sg_class_aged(__u32 class_id, __u64 now_ns) {")
+        add("    struct sg_class_state *s = bpf_map_lookup_elem(&sg_class_state, &class_id);")
+        add("    return s && sg_classes[class_id].aging_ns && s->oldest_ns && now_ns - s->oldest_ns >= sg_classes[class_id].aging_ns;")
+        add("}")
     add()
 
     select = add('SEC("struct_ops/select_cpu")')
     add("s32 BPF_STRUCT_OPS(sg_select_cpu, struct task_struct *p, s32 prev_cpu, u64 wake_flags) {")
     add("    bool direct = false;")
     add("    s32 cpu = scx_bpf_select_cpu_dfl(p, prev_cpu, wake_flags, &direct);")
-    add("    if (direct)")
-    add("        scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, sg_classes[0].quantum_ns, 0);")
+    if len(ir.classes) == 1:
+        add("    if (direct)")
+        add("        scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, sg_classes[0].quantum_ns, 0);")
+    else:
+        add("    int class_id = sg_class_for_task(p);")
+        add("    if (direct && class_id >= 0 && class_id < SG_NUM_CLASSES)")
+        add("        scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, sg_classes[class_id].quantum_ns, 0);")
     add("    return cpu;")
     add("}")
     mappings.append(CodeMapping("default CPU selection + direct dispatch", "sg_select_cpu", select, len(lines), "Prevents the kernel default select_cpu path from bypassing the configured single-class quantum."))
@@ -140,8 +185,12 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     add("void BPF_STRUCT_OPS(sg_enqueue, struct task_struct *p, u64 enq_flags) {")
     add("    __u32 pid = BPF_CORE_READ(p, pid); int class_id = sg_class_for_task(p);")
     add("    if (class_id < 0 || class_id >= SG_NUM_CLASSES) {")
-    add("        /* No invented class assignment: preserve liveness via global FIFO. */")
-    add("        scx_bpf_dsq_insert(p, SCX_DSQ_GLOBAL, sg_classes[0].quantum_ns, enq_flags);")
+    if len(ir.classes) == 1:
+        add("        /* Single-class fallback remains the configured class quantum. */")
+        add("        scx_bpf_dsq_insert(p, SCX_DSQ_GLOBAL, sg_classes[0].quantum_ns, enq_flags);")
+    else:
+        add("        /* Unknown comms use the global DSQ without inventing a class assignment. */")
+        add("        scx_bpf_dsq_insert(p, SCX_DSQ_GLOBAL, 0, enq_flags);")
     add("        return;")
     add("    }")
     add("    struct sg_task_meta m = { .class_id = class_id, .enqueued_ns = bpf_ktime_get_ns(), .queued = 1 };")
@@ -150,6 +199,9 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     add("        scx_bpf_dsq_insert(p, SCX_DSQ_GLOBAL, sg_classes[0].quantum_ns, enq_flags);")
     add("        return;")
     add("    }")
+    if len(ir.classes) > 1:
+        add("    struct sg_class_state *state = bpf_map_lookup_elem(&sg_class_state, &class_id);")
+        add("    if (state && (!state->oldest_ns || m.enqueued_ns < state->oldest_ns)) state->oldest_ns = m.enqueued_ns;")
     add("    struct sg_event *ev = bpf_ringbuf_reserve(&sg_events, sizeof(*ev), 0);")
     add("    if (ev) { ev->ts_ns = m.enqueued_ns; ev->pid = pid; ev->class_id = class_id; ev->kind = 1; bpf_ringbuf_submit(ev, 0); }")
     add("    /* Signature: (task, dsq_id, slice_ns, enqueue_flags). */")
@@ -160,6 +212,11 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     dispatch = add('SEC("struct_ops/dispatch") /* legacy skeleton used SEC("struct_ops/sched_dispatch") */')
     add("void BPF_STRUCT_OPS(sg_dispatch, s32 cpu, struct task_struct *prev) {")
     add("    __u32 class_id;")
+    if len(ir.classes) > 1:
+        add("    __u64 now_ns = bpf_ktime_get_ns();")
+        add("#pragma unroll")
+        add("    for (class_id = 0; class_id < SG_NUM_CLASSES; class_id++)")
+        add("        if (sg_class_aged(class_id, now_ns) && scx_bpf_dsq_move_to_local(sg_dsq(class_id), 0)) return;")
     add("#pragma unroll")
     add("    for (class_id = 0; class_id < SG_NUM_CLASSES; class_id++)")
     add("        if (scx_bpf_dsq_move_to_local(sg_dsq(class_id), 0)) return;")
@@ -171,6 +228,8 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
     add("void BPF_STRUCT_OPS(sg_running, struct task_struct *p) {")
     add("    __u32 pid = BPF_CORE_READ(p, pid); struct sg_task_meta *m = bpf_map_lookup_elem(&sg_tasks, &pid);")
     add("    if (m) m->queued = 0;")
+    if len(ir.classes) > 1:
+        add("    if (m) { struct sg_class_state *state = bpf_map_lookup_elem(&sg_class_state, &m->class_id); if (state && state->oldest_ns == m->enqueued_ns) state->oldest_ns = 0; }")
     add("    struct sg_event *ev = bpf_ringbuf_reserve(&sg_events, sizeof(*ev), 0);")
     add("    if (ev) { ev->ts_ns = bpf_ktime_get_ns(); ev->pid = pid; ev->class_id = m ? m->class_id : 0; ev->kind = 2; bpf_ringbuf_submit(ev, 0); }")
     add("}")
@@ -204,9 +263,9 @@ def emit_ebpf_c(ir: IRPolicy) -> CodegenResult:
         limitations=["Phase 4 source emission is not clang compilation or kernel loading.",
                      "Formal proof remains single-CPU and CPU-bound; blocking, arrivals, and multi-CPU execution are outside scope.",
                      "The runtime task map is fixed at SG_RUNTIME_MAX_TASKS=4096; SG_MODEL_MAX_TASKS is only the formal-model bound.",
-                     "Kernel load/runtime tests require explicit operator action in a Linux VM."] + unsupported,
+                     "Kernel load/runtime tests require explicit operator action in a Linux VM."] + limitations,
         mappings=mappings,
-        supported_semantics=["fixed-size class table", "priority DSQs", "quantum slice", "enqueue/dispatch/running/stopping/init/exit callbacks", "ring-buffer event emission"],
+        supported_semantics=["fixed-size class table", "priority DSQs", "quantum slice", "enqueue/dispatch/running/stopping/init/exit callbacks", "ring-buffer event emission"] + (["explicit task comm-to-class mapping", "bounded enqueue-age promotion"] if len(ir.classes) > 1 else []),
         unsupported_semantics=unsupported,
         target_kernel="6.12+", status=status,
     )

@@ -158,6 +158,31 @@ def test_codegen_api_enforces_backend_semantics_for_supported_and_unsupported_po
     assert tier_data["c_code"] == ""
     assert tier_data["unsupported_semantics"]
 
+    multiclass = open("examples/sched_ext_multiclass_aging.sched", encoding="utf-8").read()
+    response = client.post("/api/codegen", json={"source": multiclass})
+    assert response.status_code == 200
+    multi_data = response.json()
+    assert multi_data["status"] == "PASSED"
+    assert multi_data["c_code"]
+    assert "SG_NUM_CLASSES 2" in multi_data["c_code"]
+    assert "sg_class_aged" in multi_data["c_code"]
+
+    target = """policy web_batch_sched {
+      option max_tasks = 8;
+      class web { prio 0; quantum 5 ms; kind interactive; }
+      class batch { prio 1; quantum 20 ms; aging 200 ms; kind batch; }
+      guarantee no_starvation(batch, 400 ms);
+    }"""
+    response = client.post("/api/codegen", json={"source": target})
+    assert response.status_code == 200
+    target_data = response.json()
+    assert target_data["status"] == "PASSED"
+    assert target_data["c_code"]
+    assert "implicit kind mapping" in target_data["c_code"]
+    assert "sg_classes[class_id].quantum_ns" in target_data["c_code"]
+    assert "sg_class_aged" in target_data["c_code"]
+    assert "PolicyLang guarantees are not established" in target_data["limitations"]
+
 
 def test_sched_ext_ui_clears_stale_source_when_emission_is_rejected():
     ui = open("src/schedguard/studio/app.js", encoding="utf-8").read()

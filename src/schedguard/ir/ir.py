@@ -44,6 +44,7 @@ class IRPolicy:
     guarantees: tuple[IRGuarantee, ...]
     max_tasks: int
     adaptations: tuple[IRAdaptation, ...] = ()
+    sched_ext_map: str | None = None
 
     def cls(self, name: str) -> IRClass:
         for c in self.classes:

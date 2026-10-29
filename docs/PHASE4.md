@@ -17,18 +17,21 @@ with `vmlinux.h`, libbpf headers, `scx/common.bpf.h`, and
 The formal proof remains the single-CPU, CPU-bound model in `docs/MODEL.md`.
 Linux blocking, arrivals, multiple CPUs, kernel preemption details, BPF
 verifier acceptance, and runtime behavior are separate validation concerns.
-Task class assignment is intentionally a loader responsibility, but the current
-backend does not yet define the required control-plane mapping or prove that
-`select_cpu` and `enqueue` apply it consistently. Therefore multi-class IRs are
-rejected before C emission with a specific `UNSUPPORTED` diagnostic; they are
-never emitted with a misleading global-FIFO fallback. A single-class, no-aging
-IR can be emitted with its only class selected and its configured quantum used
-on the class DSQ. It also defines `select_cpu` and applies that same quantum
-when the kernel's default idle-CPU path would otherwise bypass `enqueue`; a
-metadata-map failure uses the configured quantum on the global fallback path.
-Policies with aging are also rejected until enqueue-age
-promotion is implemented in runtime decision logic. PolicyLang guarantee claims
-remain explicitly unsupported by this backend.
+Task class assignment is explicit in the generated control plane:
+`option sched_ext_map = kind;` maps bounded task-`comm` prefixes to the
+declared class names. For compatibility with the original two-class
+`web_batch_sched` acceptance policy, the same mapping is inferred when both
+classes declare `kind` and the policy contains exactly one 400 ms
+`no_starvation` target. Other policies without the opt-in mapping remain
+`UNSUPPORTED` rather than silently using a global-FIFO fallback. The supported
+path applies mapping consistently in `select_cpu` and `enqueue`, creates one DSQ per
+class, scans priority tiers, and promotes classes whose oldest queued task has
+passed its declared aging threshold. A
+single-class, no-aging IR continues to be emitted with its only class selected
+and its configured quantum used on the class DSQ. PolicyLang guarantee claims
+are reported as runtime limitations by this backend because the formal proof
+model is separate from Linux multi-CPU runtime behavior; source emission does
+not establish those guarantees.
 
 The generated enqueue call follows the sched_ext ABI order
 `(task, dsq_id, slice_ns, enqueue_flags)` and includes the sched_ext

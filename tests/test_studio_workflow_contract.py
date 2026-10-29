@@ -69,6 +69,16 @@ def test_policy_assistant_uses_bounded_synthesis_and_shows_formal_outcome():
     assert "Formal correction:" in script
 
 
+def test_repair_ui_only_applies_explicitly_verified_repairs():
+    html = (STUDIO / "index.html").read_text(encoding="utf-8")
+    script = (STUDIO / "app.js").read_text(encoding="utf-8")
+    assert "Load repairable_tight_wait.sched" in html
+    assert "repair.status || last.status || \"REPAIR_FAILED\"" in script
+    assert "repair.success && repair.source" in script
+    assert "applyBtn.disabled = !repair.success || !repair.source" in script
+    assert "Original source preserved." in script
+
+
 def test_studio_api_error_message_behavior_under_node():
     import json
     import subprocess

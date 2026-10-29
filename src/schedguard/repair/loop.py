@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 import json
 import re
+from itertools import product
 from typing import Callable, Any
 
 from ..compiler import compile_source
@@ -26,11 +27,14 @@ class RepairResult:
     source: str
     iterations: list[RepairIteration]
     max_iterations: int = MAX_ITERATIONS
+    status: str = "REPAIR_FAILED"
+    diagnostic: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {"success": self.success, "source": self.source,
                 "iterations": [i.__dict__ for i in self.iterations],
-                "max_iterations": self.max_iterations}
+                "max_iterations": self.max_iterations,
+                "status": self.status, "diagnostic": self.diagnostic}
 
 def _preserves(original, revised) -> tuple[bool, str]:
     """Require every original guarantee to remain, equal or stricter."""
@@ -90,6 +94,95 @@ def _safe_aging(ir, guarantee) -> int:
 
 def _set_max_tasks(source: str, value: int) -> str:
     return re.sub(r"(option\s+max_tasks\s*=\s*)\d+", rf"\g<1>{value}", source, count=1)
+
+
+def _minimum_wait_bound(ir, guarantee) -> int | None:
+    """Return the best bound allowed by the fixed-size model for a wait claim.
+
+    This is a conservative feasibility floor: aging and quanta may be tuned to
+    their smallest DSL values, while the observed longer-quantum relationship
+    for the target is preserved.  It never changes the declared guarantee.
+    """
+    if guarantee.kind != "no_starvation":
+        return None
+    target = ir.cls(guarantee.cls_name)
+    higher = [c for c in ir.classes if c.prio < target.prio]
+    if not higher:
+        return 0
+    target_min_quantum = 1 + int(any(c.quantum_ms < target.quantum_ms for c in higher))
+    higher_load = ir.max_tasks * len(higher)  # every quantum is at least 1ms
+    peer_load = max(0, ir.max_tasks - 1) * target_min_quantum
+    return 1 + higher_load + peer_load  # minimum aging is 1ms
+
+
+def _preserves_policy_shape(original, revised) -> tuple[bool, str]:
+    """Keep source-level priority and quantum relationships during repair."""
+    old = {c.name: c for c in original.classes}
+    new = {c.name: c for c in revised.classes}
+    for name, cls in old.items():
+        if name not in new or new[name].prio != cls.prio:
+            return False, f"changed priority for class '{name}'"
+    names = list(old)
+    for i, left in enumerate(names):
+        for right in names[i + 1:]:
+            old_delta = old[left].quantum_ms - old[right].quantum_ms
+            new_delta = new[left].quantum_ms - new[right].quantum_ms
+            if (old_delta > 0 and new_delta <= 0) or (old_delta < 0 and new_delta >= 0):
+                return False, f"changed quantum ordering between '{left}' and '{right}'"
+    return True, ""
+
+
+def _deterministic_candidates(source: str, ir, verdict: Verdict) -> list[str]:
+    """Generate a small, verifier-guided joint search over aging and quanta."""
+    candidates = []
+    if verdict.guarantee.kind == "no_starvation":
+        target = ir.cls(verdict.guarantee.cls_name)
+        higher = [c for c in ir.classes if c.prio < target.prio]
+        # Keep the first option conservative, then derive the largest useful
+        # quantum reduction from the actual bound rather than trying every ms.
+        target_values = [target.quantum_ms, max(1, target.quantum_ms // 2), 2, 1]
+        higher_options = []
+        for higher_cls in higher:
+            other_load = sum(c.quantum_ms for c in higher if c.name != higher_cls.name)
+            peer_load_by_target = max(0, ir.max_tasks - 1)
+            qmax = (verdict.guarantee.value - 1 - ir.max_tasks * other_load -
+                    peer_load_by_target * target.quantum_ms) // ir.max_tasks
+            values = [higher_cls.quantum_ms, max(1, qmax), max(1, higher_cls.quantum_ms // 2), 1]
+            higher_options.append(list(dict.fromkeys(values)))
+
+        assignments = product(*higher_options) if higher_options else [()]
+        for higher_values in assignments:
+            # Bound the deterministic search while still considering the
+            # derived values and one-step reductions for each tier.
+            if len(candidates) >= 96:
+                break
+            candidate_quanta = source
+            for cls, quantum in zip(higher, higher_values):
+                candidate_quanta = _edit_class(candidate_quanta, cls.name, "quantum", quantum)
+            for target_quantum in target_values:
+                if any(target_quantum <= quantum for cls, quantum in zip(higher, higher_values)
+                       if target.quantum_ms > cls.quantum_ms):
+                    continue
+                candidate_with_target = _edit_class(candidate_quanta, target.name, "quantum", target_quantum)
+                revised = compile_source(candidate_with_target)
+                if not revised.ok:
+                    continue
+                safe = _safe_aging(revised.ir, verdict.guarantee)
+                aging_values = [safe, max(1, safe // 2), 10, 1, target.aging_ms]
+                for aging in dict.fromkeys(aging_values):
+                    candidate = _edit_class(candidate_with_target, target.name, "aging", aging)
+                    if candidate != source and candidate not in candidates:
+                        candidates.append(candidate)
+        # Retain the existing cause-specific edit as a fallback for cases
+        # outside the no-starvation joint search.
+        primary = _deterministic_edit(source, ir, verdict)
+        if primary != source and primary not in candidates:
+            candidates.append(primary)
+    else:
+        primary = _deterministic_edit(source, ir, verdict)
+        if primary != source:
+            candidates.append(primary)
+    return candidates
 
 def _deterministic_edit(source: str, ir, verdict: Verdict) -> str:
     result = classify_violation(ir, verdict)
@@ -171,9 +264,9 @@ def repair_policy(source: str, *, feedback: str = "template",
     try:
         first = compile_source(source)
     except DSLError as exc:
-        return RepairResult(False, source, [RepairIteration(0, "REJECTED", message=str(exc))])
+        return RepairResult(False, source, [RepairIteration(0, "REJECTED", message=str(exc))], status="REPAIR_FAILED", diagnostic=str(exc))
     if not first.ok:
-        return RepairResult(False, source, [RepairIteration(0, "REJECTED", message="initial policy failed compilation")])
+        return RepairResult(False, source, [RepairIteration(0, "REJECTED", message="initial policy failed compilation")], status="REPAIR_FAILED", diagnostic="initial policy failed compilation")
     original = first.ir
     history = []
     seen_candidates = {current}
@@ -184,36 +277,65 @@ def repair_policy(source: str, *, feedback: str = "template",
         verdicts = check_all(compiled.ir)
         vd = [v.to_dict() for v in verdicts]
         if verdicts and all(v.status == "VERIFIED" for v in verdicts):
-            history.append(RepairIteration(n, "VERIFIED", verdicts=vd)); return RepairResult(True, current, history)
+            history.append(RepairIteration(n, "VERIFIED", verdicts=vd)); return RepairResult(True, current, history, status="VERIFIED", diagnostic="all declared guarantees are VERIFIED")
         if not verdicts:
             history.append(RepairIteration(n, "NO_GUARANTEES",
                                            message="policy declares no formal guarantees; nothing is eligible for repair",
                                            verdicts=[]))
-            return RepairResult(False, source, history)
+            return RepairResult(False, source, history, status="NO_GUARANTEES", diagnostic="policy declares no formal guarantees")
         violated = next((v for v in verdicts if v.status == "VIOLATED"), None)
         if violated is None:
-            history.append(RepairIteration(n, "UNKNOWN", message="final verification is UNKNOWN; repair is not accepted", verdicts=vd)); return RepairResult(False, source, history)
+            history.append(RepairIteration(n, "UNKNOWN", message="final verification is UNKNOWN; repair is not accepted", verdicts=vd)); return RepairResult(False, source, history, status="UNKNOWN", diagnostic="formal verification returned UNKNOWN")
         if n == max_iterations:
-            history.append(RepairIteration(n, "BUDGET_EXHAUSTED", verdicts=vd)); break
+            history.append(RepairIteration(n, "BUDGET_EXHAUSTED", message="repair search budget exhausted without a verified candidate", verdicts=vd)); break
         classification = classify_violation(compiled.ir, violated)
         data = classification.to_dict()
+        minimum = _minimum_wait_bound(compiled.ir, violated.guarantee)
+        if minimum is not None and violated.guarantee.value < minimum:
+            message = (f"Declared bound {violated.guarantee.value}ms is infeasible under the fixed-size model; "
+                       f"the minimum supported bound while preserving class priorities and quantum ordering is {minimum}ms.")
+            history.append(RepairIteration(n, "INFEASIBLE", classification.cause.value, message, vd))
+            return RepairResult(False, source, history, status="INFEASIBLE", diagnostic=message)
         try:
-            candidate = repairer(current, data) if repairer else _deterministic_edit(current, compiled.ir, violated)
+            candidates = [repairer(current, data)] if repairer else _deterministic_candidates(current, compiled.ir, violated)
         except Exception as exc:
-            history.append(RepairIteration(n, "REJECTED", classification.cause.value, str(exc), vd)); continue
-        revised = compile_source(candidate)
-        if candidate in seen_candidates:
+            history.append(RepairIteration(n, "REJECTED", classification.cause.value, str(exc), vd)); return RepairResult(False, source, history, status="REPAIR_FAILED", diagnostic=str(exc))
+        accepted = False
+        for candidate in candidates:
+            if candidate in seen_candidates:
+                history.append(RepairIteration(n, "REJECTED", classification.cause.value,
+                                               "repeated candidate; no progress", vd))
+                continue
+            revised = compile_source(candidate)
+            if not revised.ok:
+                history.append(RepairIteration(n, "REJECTED", classification.cause.value, "candidate failed parse/safety", vd)); continue
+            ok, why = _preserves(original, revised.ir)
+            if not ok:
+                history.append(RepairIteration(n, "REJECTED", classification.cause.value, "guarantee preservation: " + why, vd)); continue
+            ok, why = _preserves_policy_shape(original, revised.ir)
+            if not ok:
+                history.append(RepairIteration(n, "REJECTED", classification.cause.value, "policy preservation: " + why, vd)); continue
+            candidate_verdicts = check_all(revised.ir)
+            candidate_vd = [v.to_dict() for v in candidate_verdicts]
+            if candidate_verdicts and all(v.status == "VERIFIED" for v in candidate_verdicts):
+                history.append(RepairIteration(n, "REPAIRED", classification.cause.value,
+                                               feedback + "; candidate formally verified", candidate_vd))
+                history.append(RepairIteration(n, "VERIFIED", verdicts=candidate_vd))
+                return RepairResult(True, candidate, history, status="VERIFIED",
+                                    diagnostic="all declared guarantees are VERIFIED")
+            if any(v.status == "UNKNOWN" for v in candidate_verdicts):
+                history.append(RepairIteration(n, "REJECTED", classification.cause.value,
+                                               "candidate verification returned UNKNOWN", candidate_vd))
+                continue
             history.append(RepairIteration(n, "REJECTED", classification.cause.value,
-                                           "repeated candidate; no progress", vd))
+                                           "candidate still violates a declared guarantee", candidate_vd))
+            seen_candidates.add(candidate)
+            current = candidate
+            accepted = True
             break
-        if not revised.ok:
-            history.append(RepairIteration(n, "REJECTED", classification.cause.value, "candidate failed parse/safety", vd)); continue
-        ok, why = _preserves(original, revised.ir)
-        if not ok:
-            history.append(RepairIteration(n, "REJECTED", classification.cause.value, "guarantee preservation: " + why, vd)); continue
-        history.append(RepairIteration(n, "REPAIRED", classification.cause.value, feedback, vd))
-        seen_candidates.add(candidate)
-        current = candidate
+        if not accepted:
+            message = "repeated candidate; no progress" if any("repeated candidate" in i.message for i in history[-len(candidates or [None]):]) else "no viable candidate preserved policy requirements"
+            return RepairResult(False, source, history, status="REPAIR_FAILED", diagnostic=message)
     # An unverified candidate is never a repaired policy. Keep the original
     # source available so callers cannot present a partial edit as accepted.
-    return RepairResult(False, source, history)
+    return RepairResult(False, source, history, status="BUDGET_EXHAUSTED", diagnostic="repair search budget exhausted without a verified candidate")

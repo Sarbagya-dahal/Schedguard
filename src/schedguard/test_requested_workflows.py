@@ -214,7 +214,8 @@ def test_failed_repair_preserves_original_source_and_reason():
     result = repair_policy(source, feedback="heuristic")
     assert result.success is False
     assert result.source == source
-    assert any("repeated candidate" in item.message for item in result.iterations)
+    assert result.status in {"INFEASIBLE", "REPAIR_FAILED"}
+    assert result.diagnostic
 
 
 def test_demo_api_exposes_allowlisted_workflows_and_codegen_smoke():
@@ -222,7 +223,7 @@ def test_demo_api_exposes_allowlisted_workflows_and_codegen_smoke():
     response = client.get("/api/examples")
     assert response.status_code == 200
     examples = {item["demo_id"]: item for item in response.json()["examples"] if item.get("demo_id")}
-    assert {"verified-aging-baseline", "repairable-starvation", "no-guarantees", "sched-ext-smoke-supported", "sched-ext-unsupported-policy"} <= set(examples)
+    assert {"verified-aging-baseline", "repairable-tight-wait", "repairable-starvation", "no-guarantees", "sched-ext-smoke-supported", "sched-ext-unsupported-policy", "sched-ext-multiclass-aging"} <= set(examples)
     smoke = examples["sched-ext-smoke-supported"]["code"]
     codegen = client.post("/api/codegen", json={"source": smoke})
     assert codegen.status_code == 200

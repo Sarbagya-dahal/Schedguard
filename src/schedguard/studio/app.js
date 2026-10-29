@@ -425,6 +425,31 @@ function initPhase3Workbench() {
     });
   }
 
+  const loadTightBtn = document.getElementById("repairLoadTightBtn");
+  if (loadTightBtn) {
+    loadTightBtn.addEventListener("click", async () => {
+      const repairSource = document.getElementById("repairSource");
+      if (!repairSource) return;
+      if (appState.examples?.repairable_tight_wait?.code) {
+        repairSource.value = appState.examples.repairable_tight_wait.code;
+      } else {
+        try {
+          const res = await fetch("/api/examples");
+          const data = await res.json();
+          const found = (data.examples || []).find(e => e.name === "repairable_tight_wait");
+          if (found) repairSource.value = found.code;
+        } catch (err) {
+          console.error("Failed to load repairable_tight_wait example", err);
+        }
+      }
+      const status = document.getElementById("repairStatus");
+      if (status) {
+        status.textContent = "Loaded repairable_tight_wait.sched (230 ms initial bound; expected repair to 200 ms). Click 'Classify & Repair' to verify.";
+        status.className = "phase3-status";
+      }
+    });
+  }
+
   const applyBtn = document.getElementById("repairApplyBtn");
   if (applyBtn) {
     applyBtn.addEventListener("click", () => {
@@ -505,7 +530,9 @@ async function runPhase3Repair() {
       ).join("") || "No iterations recorded.";
 
     // Render repaired source
-    document.getElementById("repairSourceOutput").textContent = repair.source || "No repaired source.";
+    document.getElementById("repairSourceOutput").textContent = repair.success && repair.source
+      ? repair.source
+      : "No verified repaired source. The original policy is preserved.";
 
     // Render concrete diff
     if (diffBox) {
@@ -523,15 +550,15 @@ async function runPhase3Repair() {
       }
     }
 
-    if (copyBtn) copyBtn.disabled = !repair.source;
-    if (applyBtn) applyBtn.disabled = !repair.source || !repair.success;
+    if (copyBtn) copyBtn.disabled = !repair.success || !repair.source;
+    if (applyBtn) applyBtn.disabled = !repair.success || !repair.source;
 
     if (repair.success) {
       status.textContent = "Verified repair reached: all guarantees mathematically proven safe by Z3 SMT solver.";
       status.className = "phase3-status status-success";
     } else {
       const last = (repair.iterations || [])[repair.iterations?.length - 1] || {};
-      status.textContent = `Repair not accepted: ${last.message || "bounded loop did not reach VERIFIED"}. Original source preserved.`;
+      status.textContent = `${repair.status || last.status || "REPAIR_FAILED"}: ${repair.diagnostic || last.message || "bounded loop did not reach VERIFIED"}. Original source preserved.`;
       status.className = "phase3-status status-warning";
     }
   } catch (err) {

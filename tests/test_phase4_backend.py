@@ -79,6 +79,22 @@ def test_phase4_multiclass_rejection_mentions_required_control_plane():
     assert "select_cpu/enqueue" in message
 
 
+def test_phase4_opt_in_multiclass_aging_emits_mapping_and_promotion_logic():
+    ir = compile_file("examples/sched_ext_multiclass_aging.sched").ir
+    assert ir.sched_ext_map == "kind"
+    result = emit_ebpf_c(ir)
+    assert result.status == "PASSED"
+    assert result.c_code
+    assert "SG_NUM_CLASSES 2" in result.c_code
+    assert "sched_ext_map=kind" in result.c_code
+    assert "BPF_CORE_READ_STR_INTO" in result.c_code
+    assert "sg_class_aged" in result.c_code
+    assert "oldest_ns" in result.c_code
+    assert "sg_classes[class_id].quantum_ns" in result.c_code
+    assert any("task comm-to-class mapping" in item for item in result.supported_semantics)
+    assert any("enqueue-age promotion" in item for item in result.supported_semantics)
+
+
 def test_phase4_preflight_is_inspection_only():
     report = check_toolchain()
     assert report.status in {"READY", "NOT_READY"}

@@ -10,7 +10,7 @@ class DSLError(Exception):
 
 
 KEYWORDS = {"policy", "class", "prio", "quantum", "aging", "kind", "guarantee",
-            "option", "max_tasks", "no_starvation", "min_share", "ms", "adapt", "in"}
+            "option", "max_tasks", "sched_ext_map", "no_starvation", "min_share", "ms", "adapt", "in"}
 
 _SPEC = [
     ("COMMENT", r"//[^\n]*"),

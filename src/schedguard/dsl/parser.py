@@ -4,6 +4,7 @@
   item      := 'class' IDENT '{' attr* '}'
              | 'guarantee' gspec ';'
              | 'option' 'max_tasks' '=' INT ';'
+             | 'option' 'sched_ext_map' '=' IDENT ';'
   attr      := 'prio' INT ';' | 'quantum' INT 'ms' ';'
              | 'aging' INT 'ms' ';' | 'kind' IDENT ';'
   gspec     := 'no_starvation' '(' IDENT ',' INT 'ms' ')'
@@ -66,9 +67,17 @@ class _Parser:
             self.eat(";")
         elif c.text == "option":
             self.eat()
-            self.eat("max_tasks")
+            option = self.eat().text
             self.eat("=")
-            pol.max_tasks = self.int_()
+            if option == "max_tasks":
+                pol.max_tasks = self.int_()
+            elif option == "sched_ext_map":
+                value = self.eat()
+                if value.text != "kind":
+                    raise DSLError("sched_ext_map currently supports only 'kind'", value.line, value.col)
+                pol.sched_ext_map = value.text
+            else:
+                self.err("'max_tasks' or 'sched_ext_map'")
             self.eat(";")
         elif c.text == "adapt":
             self.eat()

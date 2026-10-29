@@ -36,3 +36,4 @@ class PolicyAST:
     guarantees: list[GuaranteeDecl] = field(default_factory=list)
     adaptations: list[AdaptDecl] = field(default_factory=list)
     max_tasks: Optional[int] = None
+    sched_ext_map: Optional[str] = None
